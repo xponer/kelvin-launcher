@@ -111,6 +111,41 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.0.17 — released (GitHub) — Speed boosters + Turbo verified (−32% on ATM10) + bug-fix pass
+- **Turbo verified working on ATM10**: after a fresh retrain, two consecutive Turbo launches
+  booted from the 638 MB cache in **75 s / 77 s** vs 104–116 s default (**≈ −32%**), benchmark
+  completed end-to-end. The earlier deterministic G1 crash was a BAD CACHE ASSEMBLY, not a
+  fundamental incompatibility — the auto-disable safety net covers exactly that case (retrain
+  fixes it). README updated to the current state (Turbo no longer "experimental-crashy"; speed
+  boosters documented; measured numbers published).
+- **Bug-fix pass**: (1) `ResetTurbo` now refuses while the game runs (the mapped cache can't be
+  deleted → state/file desync) and the UI reports the refusal instead of a false success toast;
+  (2) normal (non-benchmark) training launches announce "assembling the Turbo cache" when the
+  game window closes but the JVM stays alive (window-handle monitor) — previously looked hung
+  for minutes; (3) `VersionSortKey` segments capped at 9999 (5-digit segments × 10^5 base could
+  overflow a long and flip the sort order).
+- **Speed boosters card** (Performance tab, below Turbo): three pragmatic launch accelerators
+  that don't depend on bleeding-edge Java.
+  - **Windows Defender exclusion** — one click runs ONE elevated PowerShell
+    (`Add-MpPreference -ExclusionPath <instanceDir>,<gameRoot>`; Windows shows a UAC prompt the
+    user must approve; a declined prompt is reported cleanly via `Win32Exception`). Applied
+    paths recorded in `%LocalAppData%\VSpeedLauncher\defender-exclusions.json` (reading
+    Defender's real list needs admin, so we track our own). Bridge:
+    `getSpeedTweaks` / `addDefenderExclusion` (async, 180 s JS timeout for the UAC wait).
+  - **ModernFix dynamic resources** — toggle writes `mixin.perf.dynamic_resources=true|false`
+    into `config/modernfix-mixins.properties` (other lines preserved); detects ModernFix by jar
+    name; disabled with a hint when absent. NOTE: **ATM10 already ships with it enabled** — the
+    toggle correctly read the pack's config on first open.
+  - **OS page-cache prewarm** — on every launch (engine AND Prism paths) a background task
+    sequentially reads `mods/` (+ `libraries/` on the engine path) into the file cache
+    (1 MB buffers, SequentialScan, capped 4 GB / 90 s). Verified live: 1182 files / 1530 MB
+    in 2.2 s warm; on a cold boot this absorbs the disk latency in parallel with install checks.
+- **Honest measurement note:** with today's warm OS cache + already-scanned files + dynRes
+  already on, a post-boosters engine launch measured 116 s vs the 104–111 s baselines — within
+  noise. These boosters pay off on **cold starts (after reboot) and after mod updates**, where
+  Defender rescans and the page cache is empty; warm relaunches were already near-optimal.
+- ATM10's engine source switched to "cryo" (Play now uses the engine → boots get measured).
+
 ### v1.0.16 — released (GitHub) — VSpeed Turbo (JDK 25 AOT cache) + working Default-vs-Turbo benchmark
 - **LIVE TEST VERDICT (computer-use, full ATM10 runs):** the Turbo pipeline works END-TO-END —
   training run boots on Java 25 (158–159 s), graceful close, the JVM writes a ~650 MB training

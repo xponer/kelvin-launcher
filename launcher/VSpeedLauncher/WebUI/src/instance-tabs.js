@@ -256,9 +256,12 @@ function TurboCard({ instance, api, hasBridge }) {
 
   async function reset() {
     if (!window.confirm("Delete the Turbo AOT cache?\n\nThe next Turbo launch will re-record it (one slower training launch).")) return;
-    await api.resetTurbo(instance.id).catch(() => {});
+    const r = await api.resetTurbo(instance.id).catch(e => ({ ok: false, error: String(e) }));
     await load();
-    window.toast({ tone: "neutral", icon: "refresh", title: "Turbo cache reset", body: "The next launch trains again." });
+    if (r && r.ok)
+      window.toast({ tone: "neutral", icon: "refresh", title: "Turbo cache reset", body: "The next launch trains again." });
+    else
+      window.toast({ tone: "warn", icon: "info", title: "Couldn't reset", body: (r && r.error) || "" });
   }
 
   const MODE_META = {
@@ -357,6 +360,74 @@ function TurboCard({ instance, api, hasBridge }) {
     // actions
     st && st.enabled && st.trained && React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } },
       React.createElement(Btn, { variant: "subtle", size: "sm", icon: "refresh", onClick: reset }, "Reset cache")));
+}
+
+/* ============ SPEED BOOSTERS (Defender · ModernFix dynamic resources) ============ */
+function SpeedBoostersCard({ instance, api, hasBridge }) {
+  const [st, setSt] = tS(null);        // getSpeedTweaks result
+  const [busyDef, setBusyDef] = tS(false);
+
+  async function load() {
+    if (!hasBridge || !api.getSpeedTweaks) return;
+    const r = await api.getSpeedTweaks(instance.id).catch(() => null);
+    if (r && r.ok) setSt(r);
+  }
+  tE(() => { load(); }, [hasBridge, instance.id]);
+
+  async function excludeDefender() {
+    const ok = window.confirm(
+      "Exclude this instance and Cryo's game files from Windows Defender real-time scanning?\n\n" +
+      "Defender re-scans hundreds of mod jars on EVERY launch — on big packs that's a large share of boot time. " +
+      "Excluding these folders skips that. Only install mods from sources you trust (Modrinth / CurseForge).\n\n" +
+      "Windows will show an administrator permission prompt — click Yes there.");
+    if (!ok) return;
+    setBusyDef(true);
+    const r = await api.addDefenderExclusion(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    setBusyDef(false);
+    if (r && r.ok)
+      window.toast({ tone: "success", icon: "shield", title: "Defender exclusion added", body: "Mod scanning is skipped from the next launch." });
+    else
+      window.toast({ tone: "warn", icon: "info", title: "Not excluded", body: (r && r.error) || "" });
+    load();
+  }
+
+  async function toggleDynRes(on) {
+    const r = await api.setDynamicResources(instance.id, on).catch(() => null);
+    if (r && r.ok)
+      window.toast({ tone: on ? "accent" : "neutral", icon: "zap",
+        title: on ? "Dynamic resources ON" : "Dynamic resources OFF",
+        body: on ? "Models now load on demand — takes effect next launch. If item/block visuals glitch, switch it back off."
+                 : "Back to loading all models upfront." });
+    load();
+  }
+
+  const row = (title, desc, control) => React.createElement("div",
+    { style: { display: "flex", alignItems: "center", gap: 14, padding: "10px 0", borderBottom: "1px solid var(--border)" } },
+    React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+      React.createElement("div", { style: { fontSize: 13.5, fontWeight: 650 } }, title),
+      React.createElement("div", { style: { fontSize: 12, color: "var(--text-faint)", marginTop: 2, lineHeight: 1.45 } }, desc)),
+    control);
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 4 } },
+      React.createElement(Icon, { name: "gauge", size: 17, style: { color: "var(--acc-2)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Speed boosters")),
+
+    row("Windows Defender exclusion",
+        "Skips real-time scanning of this instance's mods + Cryo's game files on every launch — often 20–40% of the mod-scan phase on big packs.",
+        st && st.defenderExcluded
+          ? React.createElement(Badge, { tone: "success", dot: true }, "excluded")
+          : React.createElement(Btn, { variant: "outline", size: "sm", icon: busyDef ? "loader" : "shield", iconSpin: busyDef, disabled: busyDef || !st, onClick: excludeDefender },
+              busyDef ? "Waiting for admin prompt…" : "Exclude (admin)")),
+
+    row("ModernFix dynamic resources",
+        st && !st.modernfixInstalled
+          ? "ModernFix isn't installed — add it via the Add-mods tab (or the VSpeed Performance pack) to unlock this."
+          : "Bakes block/item models on demand instead of all upfront — typically 30–50% off client boot on big packs. Rarely, a mod's visuals glitch: just switch it off again.",
+        React.createElement(Toggle, { checked: !!(st && st.dynamicResources), disabled: !st || !st.modernfixInstalled, onChange: toggleDynRes })),
+
+    React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", paddingTop: 10 } },
+      "Cryo also pre-warms your mods and libraries into the OS file cache on every launch — automatic, nothing to configure."));
 }
 
 /* ============ CRYO ENGINE CARD ============ */
@@ -637,6 +708,9 @@ function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
 
     // VSpeed Turbo (JDK 25 AOT cache) — enable, train, see real boot times
     React.createElement(TurboCard, { instance, api, hasBridge }),
+
+    // Speed boosters — Defender exclusion + ModernFix dynamic resources
+    React.createElement(SpeedBoostersCard, { instance, api, hasBridge }),
 
     // benchmark (real measured speed-up + launch modes)
     React.createElement(BenchmarkCard, { instance, api, hasBridge, t, fmt }),

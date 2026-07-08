@@ -269,6 +269,11 @@ function createBridgeApi() {
     async getTurbo(id)                 { return call("getTurbo", { id }); },
     async setTurbo(id, on)             { return call("setTurbo", { id, on: !!on }); },
     async resetTurbo(id)               { return call("resetTurbo", { id }); },
+    // ── Speed boosters (Defender exclusion · ModernFix dynamic resources) ──────
+    async getSpeedTweaks(id)           { return call("getSpeedTweaks", { id }); },
+    async setDynamicResources(id, on)  { return call("setDynamicResources", { id, on: !!on }); },
+    // Long timeout: waits for the user to answer the Windows UAC prompt.
+    async addDefenderExclusion(id)     { return call("addDefenderExclusion", { id }, 180000); },
     // AI assistant — { messages:[{role,content}], instanceId?, attach?:["logs","mods","crash","launcher"] }
     // Long timeout (just over the C# 120 s HTTP timeout) so a real API error surfaces, not a bridge timeout.
     async aiChat(payload)              { return call("aiChat", payload || {}, 130000); },

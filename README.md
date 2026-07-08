@@ -50,8 +50,11 @@ log (Settings → Self-Check → Open launcher log).
 - **Pop-out live console** — a separate always-on-top-capable window tailing the game log in
   real time, colour-coded by level. Open it right next to Play and watch the whole boot.
 - **World backups**, a live **boot waterfall**, and launch **profiles**.
-- **VSpeed engine** — startup optimization: AppCDS class cache by default, plus an experimental
-  **Turbo** mode (Java 25 AOT cache) with a built-in one-click A/B benchmark (details below).
+- **VSpeed engine** — startup optimization: AppCDS class cache by default, plus **VSpeed Turbo**
+  (Java 25 AOT cache) — measured **−32% boot-to-menu on All the Mods 10** — with a built-in
+  one-click A/B benchmark that proves the number on your own pack (details below).
+- **Speed boosters** — one-click Windows Defender exclusion for your mods folder, a ModernFix
+  dynamic-resources toggle, and automatic OS file-cache pre-warming on every launch.
 - **Microsoft sign-in** — tokens encrypted at rest with **Windows DPAPI** (current-user
   scope); the launcher never stores them in plaintext and never sees your password.
 - **Tuning that won't foot-gun you** — RAM sliders capped to your machine's physical
@@ -69,15 +72,23 @@ testing on **All the Mods 10** (~480 mods) this cut boot-to-main-menu time by **
 Results vary by disk speed, RAM, mod count — and by JRE: AppCDS silently no-ops on runtimes
 that ship without a base CDS archive (e.g. some Microsoft OpenJDK builds).
 
-**VSpeed Turbo (experimental).** A per-instance toggle (Performance tab) that runs the pack on
-a **Java 25** runtime with a Project-Leyden **AOT cache**: one training launch records
-everything the JVM loads and compiles, and every launch after starts from that snapshot instead
-of redoing it. Cryo downloads the runtime, trains, assembles and invalidates the cache
-automatically (changing mods retrains), and measures every boot so you can see the difference.
-Honest status: the pipeline works end-to-end, but current JDK 25 builds can crash when running
-from the very large caches that 400+ mod packs produce — Cryo detects that, disables Turbo and
-deletes the cache automatically, so normal launches are never affected. Try it on small and
-medium packs; for huge packs, retest as newer JDK updates land.
+**VSpeed Turbo.** A per-instance toggle (Performance tab) that runs the pack on a **Java 25**
+runtime with a Project-Leyden **AOT cache**: one training launch records everything the JVM
+loads and compiles, and every launch after starts from that snapshot instead of redoing it.
+Cryo downloads the runtime, trains, assembles and invalidates the cache automatically (changing
+mods retrains), and measures every boot so you can see the difference.
+
+Measured on **All the Mods 10** (479 mods): default launch 104–116 s to the main menu, Turbo
+**75–77 s** — about **−32%**. During training you'll see a wall of harmless `[aot] Skipping…`
+warnings (signed jars and mod classes can't be archived — everything else is), and after you
+quit, the Java process stays alive a few minutes assembling the ~640 MB cache. Safety first:
+if a bad cache assembly ever makes the JVM crash, Cryo detects it, disables Turbo, deletes the
+cache and tells you — one toggle flip retrains a fresh one; normal launches are never affected.
+
+**Speed boosters** (Performance tab): a one-click **Windows Defender exclusion** for the
+instance + game files (Defender re-scans hundreds of jars on every launch — big win on cold
+starts and after mod updates), a **ModernFix dynamic-resources** toggle, and automatic **file
+cache pre-warming** on every launch.
 
 **Measure it yourself.** Every instance has a one-click **Auto-Benchmark**: Cryo launches the
 pack, detects the main menu, records the time, closes the game, and compares the default launch

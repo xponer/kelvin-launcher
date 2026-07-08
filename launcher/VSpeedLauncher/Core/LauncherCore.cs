@@ -59,7 +59,8 @@ public sealed class LauncherCore
             .ToArray();
     }
 
-    /// <summary>"21.1.228" → 21_00010_00228-style key; non-numeric tails ignored.</summary>
+    /// <summary>"21.1.228" → 0021_0001_0228_0000-style key; non-numeric tails ignored.
+    /// Segments capped at 9999 so 4 segments can never overflow a long.</summary>
     private static long VersionSortKey(string v)
     {
         long key = 0;
@@ -67,7 +68,7 @@ public sealed class LauncherCore
         for (int i = 0; i < 4; i++)
         {
             var digits = i < parts.Length ? new string(parts[i].TakeWhile(char.IsDigit).ToArray()) : "";
-            key = key * 100000 + (long.TryParse(digits, out var n) ? Math.Min(n, 99999) : 0);
+            key = key * 10000 + (long.TryParse(digits, out var n) ? Math.Min(n, 9999) : 0);
         }
         return key;
     }

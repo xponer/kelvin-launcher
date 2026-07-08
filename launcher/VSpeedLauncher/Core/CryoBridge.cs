@@ -264,6 +264,7 @@ public sealed partial class CryoBridge
         if (method == "getCurseForgeFiles")  return await GetCurseForgeFilesAsync(args.Str("projectId"), args.Str("id"));
         if (method == "checkForUpdate")      return await CheckForUpdateAsync();
         if (method == "getModpackInfo")      return await GetModpackInfoAsync(args.Str("id"));
+        if (method == "addDefenderExclusion") return await AddDefenderExclusionAsync(args.Str("id"));
 #pragma warning disable CS8619
         object? result = method switch
         {
@@ -296,6 +297,8 @@ public sealed partial class CryoBridge
             "setTurbo"        => SetTurbo(args.Str("id"), args.Bool("on", false)),
             "resetTurbo"      => ResetTurbo(args.Str("id")),
             "openConsole"     => OpenConsole(args.Str("id")),
+            "getSpeedTweaks"      => GetSpeedTweaks(args.Str("id")),
+            "setDynamicResources" => SetDynamicResources(args.Str("id"), args.Bool("on", false)),
             "selfCheck"       => SelfCheck(),
             "getAppVersion"   => GetAppVersion(),
             "applyUpdate"     => ApplyUpdate(),
@@ -1429,6 +1432,10 @@ public sealed partial class CryoBridge
         if (_config.Data.AutoHideOnLaunch)
             WpfApp.Current?.Dispatcher.Invoke(() => WpfApp.Current?.MainWindow?.Hide());
 
+        // Warm the OS file cache in parallel — Prism's JVM reads these seconds later.
+        var prismMcDir = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft");
+        _ = Task.Run(() => PrewarmFiles(new[] { Path.Combine(prismMcDir, "mods") }));
+
         _ = _manager.LaunchAsync(inst, vanilla);
         return new { ok = true, vanilla };
     }
@@ -1528,6 +1535,152 @@ public sealed partial class CryoBridge
         return new { ok = true, enabled = on, installing = false };
     }
 
+    // ── Speed boosters — Defender exclusion · ModernFix dynamic resources · prewarm ──
+
+    private static string DefenderRecordFile =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                     "VSpeedLauncher", "defender-exclusions.json");
+
+    private static List<string> LoadDefenderRecord()
+    {
+        try
+        {
+            if (File.Exists(DefenderRecordFile))
+                return JsonSerializer.Deserialize<List<string>>(File.ReadAllText(DefenderRecordFile)) ?? new();
+        }
+        catch { /* unreadable record — treat as none */ }
+        return new();
+    }
+
+    private static void SaveDefenderRecord(List<string> paths)
+    {
+        try { File.WriteAllText(DefenderRecordFile, JsonSerializer.Serialize(paths)); }
+        catch (Exception e) { Logger.Warn($"Defender record save failed: {e.Message}"); }
+    }
+
+    private string ModernFixPropsPath(string id) =>
+        Path.Combine(InstanceDataDir(id), "instances", id, "minecraft", "config", "modernfix-mixins.properties");
+
+    private object GetSpeedTweaks(string id)
+    {
+        var instDir = Path.Combine(InstanceDataDir(id), "instances", id);
+        var modsDir = Path.Combine(instDir, "minecraft", "mods");
+
+        bool modernfix = false;
+        try
+        {
+            modernfix = Directory.Exists(modsDir) && Directory.EnumerateFiles(modsDir, "*.jar")
+                .Any(f => Path.GetFileName(f).StartsWith("modernfix", StringComparison.OrdinalIgnoreCase));
+        }
+        catch { /* status only */ }
+
+        bool dynRes = false;
+        try
+        {
+            var props = ModernFixPropsPath(id);
+            if (File.Exists(props))
+                dynRes = File.ReadAllLines(props).Any(l => l.Trim().Replace(" ", "") == "mixin.perf.dynamic_resources=true");
+        }
+        catch { /* status only */ }
+
+        return new
+        {
+            ok = true,
+            modernfixInstalled = modernfix,
+            dynamicResources   = dynRes,
+            defenderExcluded   = LoadDefenderRecord().Contains(instDir, StringComparer.OrdinalIgnoreCase),
+        };
+    }
+
+    /// <summary>Writes ModernFix's biggest startup lever: models/blockstates baked
+    /// lazily instead of all upfront (30–50 % off client boot on big packs).
+    /// Preserves the rest of modernfix-mixins.properties.</summary>
+    private object SetDynamicResources(string id, bool on)
+    {
+        var props = ModernFixPropsPath(id);
+        Directory.CreateDirectory(Path.GetDirectoryName(props)!);
+        var lines = File.Exists(props) ? File.ReadAllLines(props).ToList() : new List<string>();
+        lines.RemoveAll(l => l.TrimStart().StartsWith("mixin.perf.dynamic_resources", StringComparison.OrdinalIgnoreCase));
+        lines.Add("mixin.perf.dynamic_resources=" + (on ? "true" : "false"));
+        File.WriteAllLines(props, lines);
+        Logger.Info($"ModernFix dynamic_resources={(on ? "true" : "false")} for {id}");
+        return new { ok = true, dynamicResources = on };
+    }
+
+    /// <summary>
+    /// One elevated PowerShell run (Windows shows a UAC prompt) that excludes the
+    /// instance folder + the shared game root from Defender real-time scanning —
+    /// Defender otherwise re-scans hundreds of mod jars on every launch.
+    /// </summary>
+    private async Task<object?> AddDefenderExclusionAsync(string id)
+    {
+        var instDir  = Path.Combine(InstanceDataDir(id), "instances", id);
+        var gameRoot = EngineRoot;
+        static string Q(string p) => "'" + p.Replace("'", "''") + "'";
+        var psi = new ProcessStartInfo
+        {
+            FileName        = "powershell.exe",
+            Arguments       = $"-NoProfile -Command \"Add-MpPreference -ExclusionPath {Q(instDir)},{Q(gameRoot)}\"",
+            Verb            = "runas",
+            UseShellExecute = true,
+            WindowStyle     = ProcessWindowStyle.Hidden,
+        };
+        try
+        {
+            var p = Process.Start(psi);
+            if (p == null) return new { ok = false, error = "Could not start PowerShell." };
+            await p.WaitForExitAsync();
+            if (p.ExitCode != 0)
+                return new { ok = false, error = $"Defender refused the exclusion (exit {p.ExitCode})." };
+
+            var rec = LoadDefenderRecord();
+            foreach (var d in new[] { instDir, gameRoot })
+                if (!rec.Contains(d, StringComparer.OrdinalIgnoreCase)) rec.Add(d);
+            SaveDefenderRecord(rec);
+            Logger.Info($"Defender exclusions added: '{instDir}' + '{gameRoot}'");
+            return new { ok = true };
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // User clicked "No" on the UAC prompt.
+            return new { ok = false, error = "Cancelled at the Windows permission prompt." };
+        }
+    }
+
+    /// <summary>Sequentially reads files into the OS page cache so the JVM's reads
+    /// moments later hit RAM instead of disk. Fire-and-forget; capped at 4 GB / 90 s.</summary>
+    private static void PrewarmFiles(IEnumerable<string> dirs)
+    {
+        var sw = Stopwatch.StartNew();
+        long total = 0; int files = 0;
+        var buf = new byte[1 << 20];
+        const long cap = 4L << 30;
+        try
+        {
+            foreach (var dir in dirs)
+            {
+                if (!Directory.Exists(dir)) continue;
+                foreach (var f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+                {
+                    if (total > cap || sw.Elapsed.TotalSeconds > 90) goto done;
+                    try
+                    {
+                        using var fs = new FileStream(f, FileMode.Open, FileAccess.Read,
+                                                      FileShare.ReadWrite | FileShare.Delete,
+                                                      1 << 20, FileOptions.SequentialScan);
+                        int n;
+                        while ((n = fs.Read(buf, 0, buf.Length)) > 0) total += n;
+                        files++;
+                    }
+                    catch { /* locked/unreadable file — skip */ }
+                }
+            }
+        }
+        catch { /* never let prewarm interfere with a launch */ }
+    done:
+        Logger.Info($"Prewarm: {files} files, {total / (1024 * 1024)} MB in {sw.ElapsedMilliseconds} ms");
+    }
+
     /// <summary>Opens the pop-out live console window for an instance (UI.ConsoleWindow).</summary>
     private object OpenConsole(string id)
     {
@@ -1540,6 +1693,11 @@ public sealed partial class CryoBridge
 
     private object ResetTurbo(string id)
     {
+        // While the game runs, the JVM has the cache mapped — deleting would fail
+        // silently and leave the trained-state and the file out of sync.
+        var running = _manager.FindById(id);
+        if (running != null && running.State is InstanceState.Loading or InstanceState.Ready)
+            return new { ok = false, error = "Stop the game first — the cache is in use while it runs." };
         try { File.Delete(TurboRuntime.CacheFile(id)); } catch { /* absent is fine */ }
         try { File.Delete(TurboRuntime.CacheConfigFile(id)); } catch { /* absent is fine */ }
         var st = TurboRuntime.LoadState(id);
@@ -4606,6 +4764,14 @@ Example for an unknown error:
 
                 Push("engineProgress", new { phase = "start", message = $"Launching {meta.Name} via Cryo engine…" });
 
+                // Warm the OS file cache while install checks run — the JVM reads
+                // these same files seconds later; cold-boot disk time becomes RAM hits.
+                _ = Task.Run(() => PrewarmFiles(new[]
+                {
+                    Path.Combine(gameDir, "mods"),
+                    Path.Combine(EngineRoot, "libraries"),
+                }));
+
                 var core = new LauncherCore(EngineRoot);
                 core.FileProgress += (name, done, total) =>
                     Push("engineProgress", new { phase = "file", name, done, total });
@@ -4758,6 +4924,35 @@ Example for an unknown error:
                     }
                     bootTcs?.TrySetResult(secs);
                 });
+
+                // On a training run the JVM stays alive for MINUTES after the player
+                // closes the window (it records + assembles the AOT cache before
+                // exiting). Without feedback that looks like a hang — announce it.
+                if (vspeedMode == "training")
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        bool hadWindow = false;
+                        while (true)
+                        {
+                            try
+                            {
+                                if (proc.HasExited) return;
+                                proc.Refresh();
+                                bool hasWindow = proc.MainWindowHandle != IntPtr.Zero;
+                                if (hasWindow) hadWindow = true;
+                                else if (hadWindow)
+                                {
+                                    Push("turboEvent", new { id = instanceId, phase = "assembling",
+                                        message = "Game closed — recording + assembling the Turbo cache in the background. The Java process stays alive a few minutes until it finishes." });
+                                    return;
+                                }
+                            }
+                            catch { return; }
+                            await Task.Delay(2000);
+                        }
+                    });
+                }
 
                 // Watch exit. There's no READY pipe in standalone, so the instance stays
                 // in "Loading" for its whole run — we must NOT treat every exit as a crash.
