@@ -111,7 +111,7 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
-### v1.0.16 — unreleased — VSpeed Turbo (JDK 25 AOT cache) + working Default-vs-Turbo benchmark
+### v1.0.16 — released (GitHub) — VSpeed Turbo (JDK 25 AOT cache) + working Default-vs-Turbo benchmark
 - **LIVE TEST VERDICT (computer-use, full ATM10 runs):** the Turbo pipeline works END-TO-END —
   training run boots on Java 25 (158–159 s), graceful close, the JVM writes a ~650 MB training
   record and assembles a **637 MB AOT cache** — but the measured Turbo run **crashes the JVM

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -8,8 +8,8 @@
     <!-- Exe icon (taskbar, Explorer, Start-menu shortcut). Velopack reuses it for the installer/shortcut. -->
     <ApplicationIcon>cryo.ico</ApplicationIcon>
 
-    <!-- App version — bump for each release; Velopack uses it as the SemVer. -->
-    <Version>1.0.15</Version>
+    <!-- App version вЂ” bump for each release; Velopack uses it as the SemVer. -->
+    <Version>1.0.16</Version>
     <!-- Velopack must run before WPF, so we use an explicit Program.Main. -->
     <StartupObject>VSpeedLauncher.Program</StartupObject>
 
@@ -40,7 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- React UI files — served at https://cryo.local/ via virtual host mapping -->
+    <!-- React UI files вЂ” served at https://cryo.local/ via virtual host mapping -->
     <Content Include="WebUI\**\*" Exclude="WebUI\screenshots\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
