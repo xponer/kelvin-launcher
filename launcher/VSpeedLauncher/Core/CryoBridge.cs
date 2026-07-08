@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -291,6 +292,10 @@ public sealed partial class CryoBridge
             "launchInstance"  => LaunchInstance(args.Str("id"), args.Bool("vanilla", false), args.Str("joinServer")),
             "startBenchmark"  => StartBenchmark(args.Str("id")),
             "cancelBenchmark" => CancelBenchmark(),
+            "getTurbo"        => GetTurbo(args.Str("id")),
+            "setTurbo"        => SetTurbo(args.Str("id"), args.Bool("on", false)),
+            "resetTurbo"      => ResetTurbo(args.Str("id")),
+            "openConsole"     => OpenConsole(args.Str("id")),
             "selfCheck"       => SelfCheck(),
             "getAppVersion"   => GetAppVersion(),
             "applyUpdate"     => ApplyUpdate(),
@@ -1450,48 +1455,188 @@ public sealed partial class CryoBridge
         return new { ok = true };
     }
 
+    // ── VSpeed Turbo (JDK 25 AOT cache) — status / toggle / reset ──────────────
+
+    private object GetTurbo(string id)
+    {
+        var meta      = InstanceMetaReader.Read(id, InstanceDataDir(id));
+        int javaMajor = JavaMajorForMc(meta.Mc);
+        var st        = TurboRuntime.LoadState(id);
+        var javaw     = TurboRuntime.FindJavaw();
+        var version   = GetStoredEngineVersion(id);
+        var gameDir   = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft");
+
+        long cacheSize = 0; bool trained = false;
+        try
+        {
+            var fi = new FileInfo(TurboRuntime.CacheFile(id));
+            if (fi.Exists)
+            {
+                cacheSize = fi.Length;
+                // "trained" = the cache matches the CURRENT mods — a mod change silently retrains.
+                trained = st.Fingerprint.Length > 0
+                       && st.Fingerprint == TurboRuntime.ComputeFingerprint(gameDir, version ?? "");
+            }
+        }
+        catch { /* status only */ }
+
+        return new
+        {
+            ok = true,
+            supported       = javaMajor >= 21,
+            engineInstalled = version != null,
+            javaReady       = javaw != null,
+            javaVersion     = javaw != null ? TurboRuntime.InstalledVersion() : "",
+            enabled         = st.Enabled,
+            trained,
+            cacheSizeMb     = cacheSize / (1024 * 1024),
+            trainedAt       = st.TrainedAt,
+            lastError       = st.LastError,
+            boots           = st.Boots.OrderByDescending(b => b.T).Take(8)
+                                .Select(b => new { t = b.T, secs = b.Secs, mode = b.Mode }).ToArray(),
+        };
+    }
+
+    /// <summary>Enables/disables Turbo; enabling also kicks off the Temurin 25
+    /// download when it's not installed yet (Push: turboProgress/turboDone/turboError).</summary>
+    private object SetTurbo(string id, bool on)
+    {
+        var st = TurboRuntime.LoadState(id);
+        st.Enabled = on;
+        if (on) st.LastError = "";
+        TurboRuntime.SaveState(id, st);
+        Logger.Info($"Turbo {(on ? "enabled" : "disabled")} for {id}");
+
+        if (on && TurboRuntime.FindJavaw() == null)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await TurboRuntime.ProvisionAsync((msg, done, total) =>
+                        Push("turboProgress", new { id, message = msg, bytesDone = done, bytesTotal = total }));
+                    Push("turboDone", new { id, javaVersion = TurboRuntime.InstalledVersion() });
+                }
+                catch (Exception e)
+                {
+                    Logger.Warn($"Turbo runtime install failed: {e.Message}");
+                    Push("turboError", new { id, error = e.Message });
+                }
+            });
+            return new { ok = true, enabled = on, installing = true };
+        }
+        return new { ok = true, enabled = on, installing = false };
+    }
+
+    /// <summary>Opens the pop-out live console window for an instance (UI.ConsoleWindow).</summary>
+    private object OpenConsole(string id)
+    {
+        var meta   = InstanceMetaReader.Read(id, InstanceDataDir(id));
+        var logDir = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft", "logs");
+        WpfApp.Current?.Dispatcher.Invoke(() =>
+            UI.ConsoleWindow.Open(id, string.IsNullOrWhiteSpace(meta.Name) ? id : meta.Name, logDir));
+        return new { ok = true };
+    }
+
+    private object ResetTurbo(string id)
+    {
+        try { File.Delete(TurboRuntime.CacheFile(id)); } catch { /* absent is fine */ }
+        try { File.Delete(TurboRuntime.CacheConfigFile(id)); } catch { /* absent is fine */ }
+        var st = TurboRuntime.LoadState(id);
+        st.Fingerprint = ""; st.TrainedAt = 0; st.LastError = "";
+        TurboRuntime.SaveState(id, st);
+        Logger.Info($"Turbo cache reset for {id}");
+        return new { ok = true };
+    }
+
     /// <summary>
-    /// Launches the game three times unattended and measures boot-to-menu via the
-    /// mod's READY pipe signal: (1) Vanilla baseline, (2) Optimized warm-up to
-    /// build the AppCDS class archive, (3) Optimized measured run that uses it.
-    /// No world entry required — this targets the "time to main menu" the user cares about.
+    /// Launches the game unattended via the Cryo engine and measures boot-to-menu
+    /// with log markers (ModernFix / Realms / quiet-log — no pipe mod needed):
+    /// (1) Default launch (bundled Java + AppCDS, exactly what the Launch button
+    /// does with Turbo off), (2) Turbo training IF the AOT cache isn't built yet
+    /// (time discarded; the game is closed GRACEFULLY so the cache can assemble
+    /// at shutdown), (3) Turbo measured run from the cache.
+    /// Requires: Cryo engine installed, signed in, Turbo enabled + runtime ready.
     /// </summary>
     private async Task RunBenchmarkAsync(RunningInstance inst, CancellationToken ct)
     {
-        long vanilla = -1, optimized = -1;
+        var id = inst.Entry.Id;
+        long defBoot = -1, turboBoot = -1;
         try
         {
+            // Pre-flight — fail with a message that tells the user the exact fix.
+            var versionName = GetStoredEngineVersion(id)
+                ?? throw new Exception("Install the Cryo engine for this instance first (Performance → Cryo engine card).");
+            if (!MicrosoftAccount.Instance.LoggedIn)
+                throw new Exception("Sign in first — the benchmark launches the real game.");
+            var meta = InstanceMetaReader.Read(id, InstanceDataDir(id));
+            if (JavaMajorForMc(meta.Mc) < 21)
+                throw new Exception("VSpeed Turbo needs Minecraft 1.20.5+ (Java 21-era packs).");
+            if (!TurboRuntime.LoadState(id).Enabled)
+                throw new Exception("Enable VSpeed Turbo first (the Turbo card above), then run the benchmark.");
+            if (TurboRuntime.FindJavaw() == null)
+                throw new Exception("The Java 25 Turbo runtime isn't installed yet — wait for the download in the Turbo card to finish.");
+
             // Make sure nothing is already running for this instance.
             if (inst.State != InstanceState.Stopped) { _manager.Kill(inst); await Task.Delay(3000, ct); }
 
+            var  gameDir      = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft");
+            var  fp           = TurboRuntime.ComputeFingerprint(gameDir, versionName);
+            bool needTraining = !(File.Exists(TurboRuntime.CacheFile(id)) && TurboRuntime.LoadState(id).Fingerprint == fp);
+            int  total        = needTraining ? 3 : 2;
+
             Push("benchmarkProgress", new {
-                phase = "start", step = 0, totalSteps = 3,
-                message = "Benchmark started — the game launches 3× (~5–8 min). Leave it alone until done.",
+                phase = "start", step = 0, totalSteps = total,
+                message = $"Benchmark started — the game launches {total}× (~{total * 3}–{total * 4} min). Leave the PC alone until done.",
             });
 
-            // 1) Vanilla baseline: data cache OFF, AppCDS OFF.
-            vanilla = await BenchRunAsync(inst, vanilla: true,  "Vanilla baseline (no cache, no AppCDS)", 1, ct);
+            // 1) Default: the standard engine path (bundled Java 21 + AppCDS), Turbo ignored.
+            int step = 1;
+            defBoot = await BenchRunAsync(inst, "default", "Default launch (bundled Java + AppCDS)", step, total, graceful: false, ct);
             Push("benchmarkProgress", new {
-                phase = "vanilla", step = 1, totalSteps = 3, bootVanilla = vanilla,
-                message = vanilla > 0 ? $"Vanilla boot-to-menu: {vanilla}s"
-                                      : "Vanilla run timed out / no READY signal",
+                phase = "vanilla", step, totalSteps = total, bootVanilla = defBoot,
+                message = defBoot > 0 ? $"Default boot-to-menu: {defBoot}s"
+                                      : "Default run: couldn't detect the main menu (timed out)",
             });
 
-            // 2) Optimized warm-up: builds the AppCDS archive (this run's time is discarded).
-            await BenchRunAsync(inst, vanilla: false, "Optimized warm-up (building class cache)", 2, ct);
-            Push("benchmarkProgress", new {
-                phase = "warmup", step = 2, totalSteps = 3, bootVanilla = vanilla,
-                message = "Class cache built — measuring optimized boot…",
-            });
+            // 2) Turbo training (only when the cache is missing/stale; time discarded).
+            if (needTraining)
+            {
+                step++;
+                var errBefore = TurboRuntime.LoadState(id).LastError ?? "";
+                await BenchRunAsync(inst, "auto", "Turbo training (recording the AOT cache)", step, total, graceful: true, ct);
+                // The engine's exit watcher persists the trained state once the
+                // assembly JVM (forked after the game closes) finishes — which on a
+                // big pack takes MINUTES. Wait on that outcome, not a fixed timeout.
+                Push("benchmarkProgress", new {
+                    phase = "assembling", step, totalSteps = total, bootVanilla = defBoot,
+                    message = "Game closed — assembling the AOT cache in the background (several minutes on a big pack)…",
+                });
+                var deadline = DateTime.UtcNow.AddMinutes(22);
+                while (DateTime.UtcNow < deadline && TurboRuntime.LoadState(id).Fingerprint != fp)
+                {
+                    var errNow = TurboRuntime.LoadState(id).LastError ?? "";
+                    if (errNow.Length > 0 && errNow != errBefore)
+                        throw new Exception(errNow);   // the exit watcher declared the assembly failed
+                    await Task.Delay(3000, ct);
+                }
+                if (TurboRuntime.LoadState(id).Fingerprint != fp)
+                    throw new Exception("The AOT cache assembly didn't finish in time — check logs/cryo-engine.log, then run the benchmark again.");
+                Push("benchmarkProgress", new {
+                    phase = "warmup", step, totalSteps = total, bootVanilla = defBoot,
+                    message = "AOT cache built — measuring the Turbo boot…",
+                });
+            }
 
-            // 3) Optimized measured: uses the AppCDS archive built in step 2.
-            optimized = await BenchRunAsync(inst, vanilla: false, "Optimized (measured)", 3, ct);
+            // 3) Turbo measured: launches from the AOT cache.
+            step++;
+            turboBoot = await BenchRunAsync(inst, "auto", "Turbo (measured, from the AOT cache)", step, total, graceful: false, ct);
 
-            double delta = (vanilla > 0 && optimized > 0) ? vanilla - optimized : 0;
-            double pct   = (vanilla > 0)                  ? delta / vanilla * 100.0 : 0;
+            double delta = (defBoot > 0 && turboBoot > 0) ? defBoot - turboBoot : 0;
+            double pct   = (defBoot > 0)                  ? delta / defBoot * 100.0 : 0;
             Push("benchmarkProgress", new {
-                phase = "done", step = 3, totalSteps = 3, done = true,
-                bootVanilla = vanilla, bootOptimized = optimized,
+                phase = "done", step, totalSteps = total, done = true,
+                bootVanilla = defBoot, bootOptimized = turboBoot,
                 deltaSeconds = Math.Round(delta, 1), deltaPercent = Math.Round(pct, 1),
                 message = "Benchmark complete.",
             });
@@ -1512,25 +1657,48 @@ public sealed partial class CryoBridge
         }
     }
 
-    private async Task<long> BenchRunAsync(RunningInstance inst, bool vanilla, string label, int step, CancellationToken ct)
+    /// <summary>One benchmark launch: engine-launch in <paramref name="mode"/>
+    /// ("default" | "auto"), wait for boot-to-menu (log markers), then stop the
+    /// game — gracefully (WM_CLOSE, so an AOT training run can assemble its cache
+    /// at shutdown) or by kill for the measured runs.</summary>
+    private async Task<long> BenchRunAsync(RunningInstance inst, string mode, string label, int step, int totalSteps, bool graceful, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         Push("benchmarkProgress", new {
-            phase = "launching", step, totalSteps = 3,
-            mode = vanilla ? "vanilla" : "optimized",
+            phase = "launching", step, totalSteps,
+            mode = mode == "default" ? "vanilla" : "optimized",
             message = $"Launching: {label}…",
         });
 
-        var ready = _manager.AwaitReadyAsync(inst.Entry.Id);
-        await _manager.LaunchAsync(inst, vanilla);
+        var bootTcs = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var proc = await EngineLaunchAsync(inst.Entry.Id, "", mode, bootTcs)
+            ?? throw new Exception($"Launch failed on step {step} — see the launcher log.");
 
-        // Wait for the mod's READY signal (= reached main menu), with a hard timeout.
-        var winner = await Task.WhenAny(ready, Task.Delay(TimeSpan.FromMinutes(7), ct));
+        var winner = await Task.WhenAny(bootTcs.Task, Task.Delay(TimeSpan.FromMinutes(12), ct));
         ct.ThrowIfCancellationRequested();
-        long secs = (winner == ready && ready.IsCompletedSuccessfully) ? ready.Result : -1;
+        long secs = winner == bootTcs.Task ? bootTcs.Task.Result : -1;
 
         await Task.Delay(2000, ct);                 // let the main menu settle
-        try { _manager.Kill(inst); } catch { /* ignore */ }
+        if (graceful)
+        {
+            // WM_CLOSE → clean JVM shutdown. In one-command AOT mode the JVM then
+            // writes the ~700 MB training record AND runs the cache assembly (a
+            // forked child it waits on) BEFORE exiting — several minutes on a big
+            // pack. Killing on a short timeout destroys the cache (verified live
+            // on ATM10: the 90 s kill took out the assembler), so wait generously.
+            try { proc.CloseMainWindow(); } catch { /* fall through to kill below */ }
+            Push("benchmarkProgress", new {
+                phase = "assembling", step, totalSteps,
+                message = "Game closed — recording + assembling the AOT cache (several minutes on a big pack)…",
+            });
+            var exit = proc.WaitForExitAsync(ct);
+            if (await Task.WhenAny(exit, Task.Delay(TimeSpan.FromMinutes(20), ct)) != exit)
+                try { _manager.Kill(inst); } catch { /* ignore */ }
+        }
+        else
+        {
+            try { _manager.Kill(inst); } catch { /* ignore */ }
+        }
         await Task.Delay(4000, ct);                 // let the process tree die before the next launch
         return secs;
     }
@@ -4351,7 +4519,12 @@ Example for an unknown error:
                 var meta = InstanceMetaReader.Read(instanceId, InstanceDataDir(instanceId));
                 var mc   = meta.Mc;
                 if (string.IsNullOrEmpty(mc)) mc = "1.21.1";
-                var nfv  = string.IsNullOrWhiteSpace(neoForgeVersion) ? null : neoForgeVersion;
+                // Default to the PACK's pinned loader version (mmc-pack.json), not
+                // "latest": mods hard-require their pack's NeoForge build.
+                var nfv  = !string.IsNullOrWhiteSpace(neoForgeVersion) ? neoForgeVersion
+                         : meta.Loader.Equals("NeoForge", StringComparison.OrdinalIgnoreCase)
+                           && !string.IsNullOrWhiteSpace(meta.LoaderVer) ? meta.LoaderVer
+                         : null;
 
                 Push("neoforgeProgress", new { phase = "start", message = $"Preparing NeoForge for Minecraft {mc}…" });
 
@@ -4387,8 +4560,20 @@ Example for an unknown error:
     /// </summary>
     private object LaunchWithEngine(string instanceId, string joinServer = "")
     {
-        _ = Task.Run(async () =>
-        {
+        _ = Task.Run(() => EngineLaunchAsync(instanceId, joinServer, mode: "auto", bootTcs: null));
+        return new { ok = true };
+    }
+
+    /// <summary>
+    /// Core engine launch. <paramref name="mode"/>: "auto" = respect the instance's
+    /// VSpeed Turbo state (train / use the AOT cache); "default" = force the standard
+    /// path (bundled Java + AppCDS, Turbo ignored) — used as the benchmark baseline.
+    /// <paramref name="bootTcs"/>: benchmark hook, resolved with the measured
+    /// boot-to-menu seconds (-1 if unmeasurable); interactive launches pass null.
+    /// Returns the game process, or null if the launch failed.
+    /// </summary>
+    private async Task<Process?> EngineLaunchAsync(string instanceId, string joinServer, string mode, TaskCompletionSource<long>? bootTcs)
+    {
             try
             {
                 var inst = _manager.FindById(instanceId)
@@ -4407,14 +4592,16 @@ Example for an unknown error:
                 if (inst.State is InstanceState.Loading or InstanceState.Ready)
                 {
                     Push("engineError", new { error = "Instance already running." });
-                    return;
+                    bootTcs?.TrySetResult(-1);
+                    return null;
                 }
 
                 inst.State     = InstanceState.Loading;
                 inst.LastError = null;
                 inst.Notify();
 
-                if (_config.Data.AutoHideOnLaunch)
+                // Benchmark runs keep the launcher window visible (progress lives there).
+                if (bootTcs == null && _config.Data.AutoHideOnLaunch)
                     WpfApp.Current?.Dispatcher.Invoke(() => WpfApp.Current?.MainWindow?.Hide());
 
                 Push("engineProgress", new { phase = "start", message = $"Launching {meta.Name} via Cryo engine…" });
@@ -4425,17 +4612,72 @@ Example for an unknown error:
                 core.ByteProgress += (b, t) =>
                     Push("engineProgress", new { phase = "bytes", bytesDone = b, bytesTotal = t });
 
+                // Launch the loader version the PACK pins (mmc-pack.json), not whatever
+                // got stored at install time. ATM10 pins NeoForge 21.1.228 but the old
+                // install default stored 21.1.1 → every mod failed with
+                // fml.modloadingissue.missingdependency. Self-heals on every launch;
+                // SkipIfAlreadyInstalled makes this a no-op once correct.
+                if (meta.Loader.Equals("NeoForge", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(meta.LoaderVer)
+                    && !versionName.Equals("neoforge-" + meta.LoaderVer, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.Info($"Engine: stored '{versionName}' ≠ pack's NeoForge {meta.LoaderVer} — installing the pack's version");
+                    Push("engineProgress", new { phase = "loader", message = $"Installing NeoForge {meta.LoaderVer} (the version this pack requires)…" });
+                    var loaderProg = new Progress<string>(msg => Push("engineProgress", new { phase = "loader", message = msg }));
+                    versionName = await core.InstallNeoForgeAsync(meta.Mc, meta.LoaderVer, loaderProg);
+                    StoreEngineVersion(instanceId, versionName);
+                    Logger.Info($"Engine: now using {versionName} for '{instanceId}'");
+                }
+
                 // Build extra JVM args: VSpeed pipe signal + AppCDS.
+                // ⚠️ NEVER use MArgument.FromCommandLine for values that can contain
+                // spaces — it PARSES a command line and splits on them. An instance id
+                // like "All the Mods 10 - ATM10" became 6 tokens and the JVM aborted
+                // with `Could not find or load main class the`. The single-string ctor
+                // keeps the value as ONE argument and CmlLib quotes it when building.
                 var extraJvm = new List<CmlLib.Core.ProcessBuilder.MArgument>
                 {
-                    CmlLib.Core.ProcessBuilder.MArgument.FromCommandLine($"-Dvspeed.daemon=true"),
-                    CmlLib.Core.ProcessBuilder.MArgument.FromCommandLine($"-Dvspeed.instance={instanceId}"),
+                    new CmlLib.Core.ProcessBuilder.MArgument("-Dvspeed.daemon=true"),
+                    new CmlLib.Core.ProcessBuilder.MArgument($"-Dvspeed.instance={instanceId}"),
                 };
+                int javaMajor = JavaMajorForMc(meta.Mc);
+
+                // ── VSpeed Turbo (JDK 25 AOT cache, Project Leyden) ──────────
+                // "training": -XX:AOTCacheOutput records this run; the cache is
+                // assembled by a forked JVM at normal shutdown (a force-kill
+                // produces none). "turbo": -XX:AOTCache maps it straight back in.
+                // Only ever added on the Turbo Java 25 runtime — the flags don't
+                // exist on Java 21 and would abort the JVM.
+                string  vspeedMode = "standard";     // standard | training | turbo
+                string? turboJava  = null;
+                string  turboCache = TurboRuntime.CacheFile(instanceId);
+                string  turboFp    = "";
+                if (mode != "default" && javaMajor >= 21 && TurboRuntime.LoadState(instanceId).Enabled)
+                {
+                    turboJava = TurboRuntime.FindJavaw();
+                    if (turboJava == null)
+                        Logger.Warn($"Turbo enabled for {instanceId} but the Java 25 runtime isn't installed yet — standard launch");
+                    else
+                    {
+                        Directory.CreateDirectory(TurboRuntime.AotDir);
+                        turboFp = TurboRuntime.ComputeFingerprint(gameDir, versionName);
+                        bool cacheValid = File.Exists(turboCache)
+                                       && TurboRuntime.LoadState(instanceId).Fingerprint == turboFp;
+                        vspeedMode = cacheValid ? "turbo" : "training";
+                        extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument(
+                            cacheValid ? $"-XX:AOTCache={turboCache}" : $"-XX:AOTCacheOutput={turboCache}"));
+                        Logger.Info($"Turbo {vspeedMode} launch for {instanceId} (fp={turboFp})");
+                        Push("engineProgress", new { phase = "turbo", message = cacheValid
+                            ? "VSpeed Turbo: launching from the AOT cache…"
+                            : "VSpeed Turbo: training run — quit the game normally so the cache gets saved." });
+                    }
+                }
+
                 // AppCDS auto-archive (-XX:+AutoCreateSharedArchive) only exists in Java 19+.
                 // Older Minecraft uses Java 17/8 — adding it there makes the JVM abort on start
                 // ("Unrecognized VM option"). Gate it on the Java the MC version actually uses.
-                int javaMajor = JavaMajorForMc(meta.Mc);
-                if (javaMajor >= 19)
+                // Turbo supersedes it: the JVM rejects -XX:SharedArchiveFile next to the AOT cache.
+                if (vspeedMode == "standard" && javaMajor >= 19)
                 {
                     try
                     {
@@ -4443,11 +4685,10 @@ Example for an unknown error:
                         Directory.CreateDirectory(cdsDir);
                         var safe = new string(instanceId.Where(char.IsLetterOrDigit).ToArray());
                         var jsa  = Path.Combine(cdsDir, (safe.Length > 0 ? safe : "inst") + ".jsa");
-                        if (!jsa.Contains(' '))
-                        {
-                            extraJvm.Add(CmlLib.Core.ProcessBuilder.MArgument.FromCommandLine($"-XX:+AutoCreateSharedArchive"));
-                            extraJvm.Add(CmlLib.Core.ProcessBuilder.MArgument.FromCommandLine($"-XX:SharedArchiveFile={jsa}"));
-                        }
+                        // Single-string MArgument: kept as ONE argument and quoted by
+                        // CmlLib, so a spaced path (e.g. a spaced Windows user name) is safe.
+                        extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument("-XX:+AutoCreateSharedArchive"));
+                        extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument($"-XX:SharedArchiveFile={jsa}"));
                     }
                     catch (Exception ex) { Logger.Warn($"AppCDS setup skipped for engine launch: {ex.Message}"); }
                 }
@@ -4468,8 +4709,14 @@ Example for an unknown error:
                 // 3) If no suitable bundled JRE is present yet, leave null so CmlLib
                 //    downloads and resolves the correct runtime itself (vanilla path).
                 string? javaExe   = null;
+                if (vspeedMode is "training" or "turbo")
+                {
+                    // Turbo runs MUST use the Java 25 runtime (the AOT flags were added).
+                    javaExe = turboJava;
+                    Logger.Info($"Java: VSpeed Turbo runtime → {javaExe}");
+                }
                 var     userJava  = ReadInstanceJavaPath(instanceId);
-                if (!string.IsNullOrWhiteSpace(userJava))
+                if (javaExe == null && !string.IsNullOrWhiteSpace(userJava))
                 {
                     if (File.Exists(userJava)) { javaExe = userJava; Logger.Info($"Java: user override → {userJava}"); }
                     else Logger.Warn($"Java: configured path not found, ignoring → {userJava}");
@@ -4493,8 +4740,24 @@ Example for an unknown error:
                 inst.PrismProcess = proc;
                 inst.Notify();
                 var launchedAt = DateTime.UtcNow;
-                Logger.Info($"Engine launch: '{instanceId}' pid={proc.Id} version={versionName}");
+                Logger.Info($"Engine launch: '{instanceId}' pid={proc.Id} version={versionName} vspeed={vspeedMode}");
                 Push("engineProgress", new { phase = "launched", pid = proc.Id });
+
+                // Measure boot-to-menu from the stdout log (ModernFix / Realms /
+                // quiet-log markers — no pipe mod needed) and record it, so the
+                // Performance tab can show Default-vs-Turbo times from real launches.
+                var launchMode = mode == "default" ? "default" : vspeedMode;
+                _ = Task.Run(async () =>
+                {
+                    long secs = await TurboRuntime.WatchBootAsync(engineLog, proc);
+                    if (secs > 0)
+                    {
+                        TurboRuntime.RecordBoot(instanceId, secs, launchMode);
+                        Logger.Info($"Boot measured for {instanceId}: {secs}s ({launchMode})");
+                        Push("bootMeasured", new { id = instanceId, seconds = secs, mode = launchMode });
+                    }
+                    bootTcs?.TrySetResult(secs);
+                });
 
                 // Watch exit. There's no READY pipe in standalone, so the instance stays
                 // in "Loading" for its whole run — we must NOT treat every exit as a crash.
@@ -4503,19 +4766,93 @@ Example for an unknown error:
                 _ = Task.Run(async () =>
                 {
                     await proc.WaitForExitAsync();
-                    if (inst.State == InstanceState.Stopped) return;   // user pressed Stop (Kill set this)
-                    var ranFor = DateTime.UtcNow - launchedAt;
-                    if (proc.ExitCode != 0 && ranFor < TimeSpan.FromSeconds(60))
+                    bool userStopped   = inst.State == InstanceState.Stopped;   // Kill set this
+                    var  ranFor        = DateTime.UtcNow - launchedAt;
+                    bool startupCrash  = !userStopped && proc.ExitCode != 0 && ranFor < TimeSpan.FromSeconds(60);
+                    if (!userStopped)
                     {
-                        inst.LastError = $"Game exited (code {proc.ExitCode}) during startup.";
-                        inst.State     = InstanceState.Crashed;
+                        if (startupCrash)
+                        {
+                            inst.LastError = $"Game exited (code {proc.ExitCode}) during startup.";
+                            inst.State     = InstanceState.Crashed;
+                        }
+                        else
+                        {
+                            inst.State = InstanceState.Stopped;   // normal close / ran fine then exited
+                        }
+                        WpfApp.Current?.Dispatcher.Invoke(inst.Notify);
                     }
-                    else
+
+                    // ── Turbo bookkeeping ────────────────────────────────────
+                    // A JVM NATIVE crash (hs_err, "A fatal error has been detected")
+                    // on the Turbo path can happen at ANY point of the run — seen live
+                    // on ATM10: a G1 GC thread died reading corrupted metadata from the
+                    // mapped 637 MB AOT cache (JDK 25 bug on very large caches). That
+                    // must disable Turbo AND delete the cache, or every launch crashes.
+                    bool jvmFatal = false;
+                    if (proc.ExitCode != 0 && vspeedMode is "training" or "turbo")
                     {
-                        inst.State = InstanceState.Stopped;   // normal close / ran fine then exited
+                        try
+                        {
+                            using var fs = new FileStream(engineLog, FileMode.Open, FileAccess.Read,
+                                                          FileShare.ReadWrite | FileShare.Delete);
+                            var take = Math.Min(fs.Length, 64 * 1024);
+                            fs.Seek(-take, SeekOrigin.End);
+                            var buf = new byte[take];
+                            int n = fs.Read(buf, 0, buf.Length);
+                            jvmFatal = System.Text.Encoding.UTF8.GetString(buf, 0, n)
+                                             .Contains("A fatal error has been detected");
+                        }
+                        catch { /* log unreadable — fall back to the startup-crash rule */ }
                     }
-                    WpfApp.Current?.Dispatcher.Invoke(inst.Notify);
+
+                    if ((startupCrash || jvmFatal) && vspeedMode is "training" or "turbo")
+                    {
+                        // Auto-fallback: a Turbo-only crash must not brick the instance.
+                        var st = TurboRuntime.LoadState(instanceId);
+                        st.Enabled     = false;
+                        st.Fingerprint = "";
+                        st.TrainedAt   = 0;
+                        try { File.Delete(turboCache); } catch { /* keep going */ }
+                        try { File.Delete(TurboRuntime.CacheConfigFile(instanceId)); } catch { /* keep going */ }
+                        st.LastError = jvmFatal
+                            ? "The Turbo run hit a fatal JVM error (a known Java 25 AOT-cache instability on very large packs). Turbo was disabled and the cache deleted — normal launches are unaffected."
+                            : $"Turbo launch crashed during startup (exit {proc.ExitCode}) — Turbo was disabled, normal launch works again. A mod may be incompatible with Java 25.";
+                        TurboRuntime.SaveState(instanceId, st);
+                        Logger.Warn($"Turbo auto-disabled for {instanceId}: {(jvmFatal ? "fatal JVM error on the Turbo path" : "startup crash on the Java 25 path")}");
+                        Push("turboEvent", new { id = instanceId, phase = "crashed", message = st.LastError });
+                    }
+                    else if (vspeedMode == "training" && !startupCrash)
+                    {
+                        // The cache is assembled by a forked JVM after the game closes —
+                        // on a big pack that grinds for MINUTES (the training record alone
+                        // is ~700 MB on ATM10). Wait on the actual assembler process.
+                        // A force-killed game produces no cache at all (expected).
+                        var size = await TurboRuntime.AwaitTrainedCacheAsync(turboCache, launchedAt, proc.Id,
+                            onAssembling: () => Push("turboEvent", new { id = instanceId, phase = "assembling",
+                                message = "Building the Turbo AOT cache in the background — this can take several minutes…" }));
+                        try { File.Delete(TurboRuntime.CacheConfigFile(instanceId)); } catch { /* reclaim the ~700 MB record */ }
+                        if (size > 0)
+                        {
+                            var st = TurboRuntime.LoadState(instanceId);
+                            st.Fingerprint = turboFp;
+                            st.TrainedAt   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                            st.LastError   = "";
+                            TurboRuntime.SaveState(instanceId, st);
+                            Logger.Info($"Turbo trained for {instanceId}: {size / (1024 * 1024)} MB AOT cache");
+                            Push("turboEvent", new { id = instanceId, phase = "trained", cacheSizeMb = size / (1024 * 1024) });
+                        }
+                        else
+                        {
+                            var st = TurboRuntime.LoadState(instanceId);
+                            st.LastError = "The training run ended but the AOT cache assembly didn't produce a cache — launch again to retrain (quit the game normally, don't force-Stop).";
+                            TurboRuntime.SaveState(instanceId, st);
+                            Logger.Warn($"Turbo training ended without a cache for {instanceId} (force-killed / assembly failed) — next launch trains again");
+                            Push("turboEvent", new { id = instanceId, phase = "trainIncomplete" });
+                        }
+                    }
                 });
+                return proc;
             }
             catch (Exception e)
             {
@@ -4528,9 +4865,9 @@ Example for an unknown error:
                     WpfApp.Current?.Dispatcher.Invoke(inst.Notify);
                 }
                 Push("engineError", new { error = e.Message });
+                bootTcs?.TrySetResult(-1);
+                return null;
             }
-        });
-        return new { ok = true };
     }
 
     // ── Standalone engine (CmlLib.Core) — beta self-test: install + launch offline ──

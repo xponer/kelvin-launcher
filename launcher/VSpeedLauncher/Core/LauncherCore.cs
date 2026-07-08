@@ -49,10 +49,27 @@ public sealed class LauncherCore
         var launcher  = new MinecraftLauncher(path);
         var installer = new NeoForgeInstaller(launcher);
         var versions  = await installer.GetForgeVersions(mcVersion);
+        // Sort numerically, newest first — CmlLib's order isn't guaranteed, and a
+        // string sort puts "21.1.9" above "21.1.172". The UI preselects the first
+        // entry, so a wrong order here installs an ancient loader.
         return versions
             .Select(v => v.VersionName ?? "")
             .Where(s => !string.IsNullOrEmpty(s))
+            .OrderByDescending(VersionSortKey)
             .ToArray();
+    }
+
+    /// <summary>"21.1.228" → 21_00010_00228-style key; non-numeric tails ignored.</summary>
+    private static long VersionSortKey(string v)
+    {
+        long key = 0;
+        var parts = v.Split('.', '-', '+');
+        for (int i = 0; i < 4; i++)
+        {
+            var digits = i < parts.Length ? new string(parts[i].TakeWhile(char.IsDigit).ToArray()) : "";
+            key = key * 100000 + (long.TryParse(digits, out var n) ? Math.Min(n, 99999) : 0);
+        }
+        return key;
     }
 
     /// <summary>
@@ -177,19 +194,27 @@ public sealed class LauncherCore
             MaximumRamMb = ramMb > 0 ? ramMb : 4096,
         };
         if (!string.IsNullOrWhiteSpace(javaPath)) opt.JavaPath = javaPath;
-        // --gameDir tells Minecraft/NeoForge where to find mods, config, saves;
-        // extraGameArgs carries e.g. --quickPlayMultiplayer for "Join server".
-        var gameArgs = new List<MArgument>();
+        // Game dir: the version json ALREADY contains "--gameDir ${game_directory}",
+        // so override the variable instead of appending a second --gameDir — Mod-
+        // Launcher's option parser hard-crashes on a duplicate option
+        // (joptsimple MultipleArgumentsForOptionException). Verified on the real
+        // neoforge-21.1.1: this yields exactly ONE properly-quoted --gameDir while
+        // assets/libraries stay in the shared root.
         if (!string.IsNullOrWhiteSpace(gameDir))
-        {
-            gameArgs.Add(MArgument.FromCommandLine("--gameDir"));
-            gameArgs.Add(MArgument.FromCommandLine(gameDir));
-        }
+            opt.ArgumentDictionary = new Dictionary<string, string> { ["game_directory"] = gameDir };
+        var gameArgs = new List<MArgument>();
         if (extraGameArgs != null) gameArgs.AddRange(extraGameArgs);
         if (gameArgs.Count > 0) opt.ExtraGameArguments = gameArgs;
         if (extraJvmArgs != null) opt.ExtraJvmArguments = extraJvmArgs;
 
         var proc = await launcher.InstallAndBuildProcessAsync(versionId, opt, ct);
+
+        // CWD must be the instance dir, like Prism does: many mods (FancyMenu,
+        // Jupiter, Ice&Fire…) resolve "./config/…" against the process working
+        // directory, not --gameDir. CmlLib defaults it to the shared root, which
+        // crashed FancyMenu (IOException reading its config → NPE in LoadingOverlay).
+        if (!string.IsNullOrWhiteSpace(gameDir))
+            proc.StartInfo.WorkingDirectory = gameDir;
 
         // Capture the JVM's stdout/stderr so early crashes (which never reach
         // Minecraft's own logs/latest.log) are still recoverable for diagnosis.

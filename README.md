@@ -47,8 +47,11 @@ log (Settings → Self-Check → Open launcher log).
 - **Server browser** with live ping / MOTD / player count, plus a one-click **Join**
   that launches straight into a server.
 - **AI assistant** — diagnoses crashes, mod conflicts, and lag (bring your own free NVIDIA key).
+- **Pop-out live console** — a separate always-on-top-capable window tailing the game log in
+  real time, colour-coded by level. Open it right next to Play and watch the whole boot.
 - **World backups**, a live **boot waterfall**, and launch **profiles**.
-- **VSpeed engine** — AppCDS-based startup optimization (details below).
+- **VSpeed engine** — startup optimization: AppCDS class cache by default, plus an experimental
+  **Turbo** mode (Java 25 AOT cache) with a built-in one-click A/B benchmark (details below).
 - **Microsoft sign-in** — tokens encrypted at rest with **Windows DPAPI** (current-user
   scope); the launcher never stores them in plaintext and never sees your password.
 - **Tuning that won't foot-gun you** — RAM sliders capped to your machine's physical
@@ -57,16 +60,28 @@ log (Settings → Self-Check → Open launcher log).
 
 ---
 
-## VSpeed — faster startup via AppCDS
+## VSpeed — faster startup
 
-On **Java 19+** the engine adds `-XX:+AutoCreateSharedArchive`, so the first launch
-records a class-data archive and every subsequent launch maps it directly into memory —
-skipping a big chunk of JAR parsing, bytecode verification, and class linking.
+**AppCDS (default).** On **Java 19+** the engine adds `-XX:+AutoCreateSharedArchive`, so the
+first launch records a class-data archive and every subsequent launch maps it directly into
+memory — skipping a chunk of JAR parsing, bytecode verification, and class linking. In our
+testing on **All the Mods 10** (~480 mods) this cut boot-to-main-menu time by **~13%**.
+Results vary by disk speed, RAM, mod count — and by JRE: AppCDS silently no-ops on runtimes
+that ship without a base CDS archive (e.g. some Microsoft OpenJDK builds).
 
-In our testing on **All the Mods 10** (481 mods, 12 GB RAM) this cut boot-to-main-menu
-time by **~13%** (≈79 s → ≈68 s). Results vary by disk speed, RAM, and mod count. AppCDS
-is gated to Java 19+ (older JVMs reject the flag), and the instance's Performance tab has
-a built-in A/B benchmark (vanilla vs optimized) so you can measure the gain on your machine.
+**VSpeed Turbo (experimental).** A per-instance toggle (Performance tab) that runs the pack on
+a **Java 25** runtime with a Project-Leyden **AOT cache**: one training launch records
+everything the JVM loads and compiles, and every launch after starts from that snapshot instead
+of redoing it. Cryo downloads the runtime, trains, assembles and invalidates the cache
+automatically (changing mods retrains), and measures every boot so you can see the difference.
+Honest status: the pipeline works end-to-end, but current JDK 25 builds can crash when running
+from the very large caches that 400+ mod packs produce — Cryo detects that, disables Turbo and
+deletes the cache automatically, so normal launches are never affected. Try it on small and
+medium packs; for huge packs, retest as newer JDK updates land.
+
+**Measure it yourself.** Every instance has a one-click **Auto-Benchmark**: Cryo launches the
+pack, detects the main menu, records the time, closes the game, and compares the default launch
+against Turbo — plus a rolling list of measured boot times from your real launches.
 
 ---
 

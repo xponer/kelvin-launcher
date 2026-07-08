@@ -328,26 +328,10 @@ function Shell() {
     api.getInstances().then(setInstances).catch(() => setInstances([]));
   }, [api]);
 
-  // Crash auto-diagnose: when a game crashes, open the Assistant pre-loaded with the crash context.
-  aE(() => {
-    let last = 0;
-    function onState(e) {
-      const d = (e && e.detail) || {};
-      if (String(d.state || "").toLowerCase() !== "crashed") return;
-      if (Date.now() - last < 8000) return;   // de-dupe rapid repeats
-      last = Date.now();
-      window.__cryoAssistantPreload = {
-        instanceId: d.id,
-        attach: { logs: true, crash: true },
-        prompt: "My game just crashed. Read the crash report and recent log, explain the most likely cause, and propose concrete fixes.",
-        autoSend: true,
-      };
-      if (window.toast) window.toast({ tone: "danger", icon: "alert", title: "Crash detected", body: "Opening the assistant to diagnose…" });
-      navigate("assistant");
-    }
-    window.addEventListener("cryo:instanceStateChanged", onState);
-    return () => window.removeEventListener("cryo:instanceStateChanged", onState);
-  }, [navigate]);
+  // NOTE: the crash auto-diagnose (auto-opening the Assistant with the crash
+  // attached on every "crashed" state) was removed on user request — crashes now
+  // only show the toast from instance.js; the Logs screen's "Ask AI" button is
+  // the manual way to send a crash to the assistant.
 
   // Auto-update: silently check GitHub once on startup; toast if an update is ready.
   aE(() => {
