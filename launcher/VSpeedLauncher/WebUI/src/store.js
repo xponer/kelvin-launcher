@@ -264,6 +264,11 @@ function createBridgeApi() {
     async joinServer(id, ip)           { return call("launchInstance", { id, joinServer: ip }); },
     async startBenchmark(id)           { return call("startBenchmark", { id }); },
     async cancelBenchmark()            { return call("cancelBenchmark"); },
+    async openConsole(id)              { return call("openConsole", { id }); },
+    // ── VSpeed Turbo (JDK 25 AOT cache) ───────────────────────────────────────
+    async getTurbo(id)                 { return call("getTurbo", { id }); },
+    async setTurbo(id, on)             { return call("setTurbo", { id, on: !!on }); },
+    async resetTurbo(id)               { return call("resetTurbo", { id }); },
     // AI assistant — { messages:[{role,content}], instanceId?, attach?:["logs","mods","crash","launcher"] }
     // Long timeout (just over the C# 120 s HTTP timeout) so a real API error surfaces, not a bridge timeout.
     async aiChat(payload)              { return call("aiChat", payload || {}, 130000); },

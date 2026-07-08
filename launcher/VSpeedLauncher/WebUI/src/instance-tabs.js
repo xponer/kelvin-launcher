@@ -64,7 +64,7 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
         setAuto(res); try { localStorage.setItem(AUTOK, JSON.stringify(res)); } catch {}
         setRunning(false); setProg(null);
         window.toast({ tone: "success", icon: "gauge", title: "Benchmark complete",
-          body: (d.deltaSeconds > 0 ? "Optimized boot saved " + d.deltaSeconds + "s (" + d.deltaPercent + "%)"
+          body: (d.deltaSeconds > 0 ? "Turbo boot saved " + d.deltaSeconds + "s (" + d.deltaPercent + "%)"
                                     : "No measurable boot speed-up — see result below") });
       } else if (d.phase === "error") {
         setRunning(false); setProg(null);
@@ -84,9 +84,9 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
   async function startAuto() {
     if (!hasBridge) { window.toast({ tone: "warn", icon: "info", title: "Preview mode", body: "Auto-benchmark runs in the desktop launcher." }); return; }
     const ok = window.confirm(
-      "Run the automated boot-to-menu benchmark?\n\n" +
-      "Cryo will launch \"" + instance.name + "\" three times (Vanilla → Optimized warm-up → Optimized measured) and close it each time at the main menu.\n\n" +
-      "This takes about 5–8 minutes. Don't game on the PC meanwhile.");
+      "Run the automated Default vs Turbo benchmark?\n\n" +
+      "Cryo will launch \"" + instance.name + "\" 2–3 times (Default → Turbo training if the cache isn't built yet → Turbo measured) and close it each time at the main menu.\n\n" +
+      "Needs: Cryo engine installed + signed in + VSpeed Turbo enabled (card above). Takes ~5–12 minutes; don't use the PC for gaming meanwhile.");
     if (!ok) return;
     setRunning(true); setProg({ step: 0, totalSteps: 3, message: "Starting…" });
     const r = await api.startBenchmark(instance.id).catch(e => ({ ok: false, error: String(e) }));
@@ -122,10 +122,10 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
   const autoCard = React.createElement(Card, { style: { borderRadius: "var(--r-xl)" } },
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 6 } },
       React.createElement(Icon, { name: "zap", size: 17, style: { color: "var(--acc-2)" } }),
-      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Auto-Benchmark — boot to main menu"),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Auto-Benchmark — Default vs Turbo"),
       React.createElement("span", { style: { marginLeft: "auto", fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--acc-text)", background: "var(--acc-soft)", border: "1px solid var(--acc-soft-2)", borderRadius: 999, padding: "3px 9px" } }, "automatic")),
     React.createElement("p", { style: { margin: "0 0 16px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "One click runs the whole test: Vanilla baseline → Optimized warm-up (builds the class cache) → Optimized measured. Cryo launches the game, waits for the main menu, records the time and closes it. 3 launches, ~5–8 min, no world entry needed."),
+      "One click proves the speed-up on YOUR pack: Default launch → Turbo training (only if the AOT cache isn't built yet) → Turbo measured. Cryo launches the game, detects the main menu, records the time and closes it. 2–3 launches, ~5–12 min, no world entry needed. Enable VSpeed Turbo above first."),
 
     running
       ? React.createElement("div", null,
@@ -135,7 +135,7 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
             React.createElement(Btn, { variant: "outline", size: "sm", onClick: cancelAuto }, "Cancel")),
           React.createElement("div", { style: { height: 8, borderRadius: 6, background: "var(--panel-2)", overflow: "hidden" } },
             React.createElement("div", { style: { height: "100%", width: (prog ? (prog.step / prog.totalSteps) * 100 : 0) + "%", background: "var(--acc-grad)", transition: "width .6s var(--ease)" } })))
-      : React.createElement(Btn, { variant: "primary", icon: "gauge", onClick: startAuto }, "Run Auto-Benchmark (3 launches)"),
+      : React.createElement(Btn, { variant: "primary", icon: "gauge", onClick: startAuto }, "Run Auto-Benchmark (Default vs Turbo)"),
 
     auto && !running && React.createElement("div", { style: { marginTop: 16 } },
       (auto.bootVanilla > 0 && auto.bootOptimized > 0)
@@ -143,12 +143,12 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 } },
               React.createElement("span", { className: "tnum", style: { fontSize: 30, fontWeight: 760, color: auto.deltaSeconds > 0 ? "var(--success)" : "var(--text-dim)" } }, (auto.deltaSeconds > 0 ? "−" : "+") + Math.abs(pct) + "%"),
               React.createElement("span", { style: { fontSize: 13, color: "var(--text-dim)" } }, "boot-to-menu · " + (auto.deltaSeconds > 0 ? ("saved " + auto.deltaSeconds + "s") : "no speed-up"))),
-            autoBar("Vanilla", auto.bootVanilla, "var(--text-faint)", false),
-            autoBar("Optimized", auto.bootOptimized, "var(--acc-grad)", true),
+            autoBar("Default", auto.bootVanilla, "var(--text-faint)", false),
+            autoBar("Turbo", auto.bootOptimized, "var(--acc-grad)", true),
             React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", marginTop: 8 } },
-              "boot-to-menu only · AppCDS class cache. Data-load (recipes) is measured separately below."))
+              "boot-to-menu · VSpeed Turbo (Java 25 AOT cache) vs the default launch. Data-load (recipes) is measured separately below."))
         : React.createElement("div", { style: { padding: "14px 16px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
-            "Last run incomplete — " + (auto.bootVanilla > 0 ? ("Vanilla " + auto.bootVanilla + "s") : "Vanilla —") + " · " + (auto.bootOptimized > 0 ? ("Optimized " + auto.bootOptimized + "s") : "Optimized —") + ". Run it again.")));
+            "Last run incomplete — " + (auto.bootVanilla > 0 ? ("Default " + auto.bootVanilla + "s") : "Default —") + " · " + (auto.bootOptimized > 0 ? ("Turbo " + auto.bootOptimized + "s") : "Turbo —") + ". Run it again.")));
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 18 } },
     autoCard,
@@ -184,6 +184,179 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
                 ? "Last run: " + stats.mode + " · " + (stats.totalMs/1000).toFixed(2) + "s for " + (stats.totalEntries||0).toLocaleString() + " entries. Run both modes to compare."
                 : "No measurement yet. Launch a mode and enter a world once.")),
   ));
+}
+
+/* ============ VSPEED TURBO (JDK 25 AOT cache) ============ */
+function TurboCard({ instance, api, hasBridge }) {
+  const [st, setSt]     = tS(null);   // getTurbo result
+  const [dl, setDl]     = tS(null);   // runtime download progress { message, bytesDone, bytesTotal }
+  const [busy, setBusy] = tS(false);
+
+  async function load() {
+    if (!hasBridge || !api.getTurbo) return;
+    const r = await api.getTurbo(instance.id).catch(() => null);
+    if (r && r.ok) setSt(r);
+  }
+  tE(() => { load(); }, [hasBridge, instance.id]);
+
+  // Live events: runtime download, training/crash bookkeeping, per-launch boot times.
+  tE(() => {
+    function onProg(e) { setDl(e.detail || {}); }
+    function onDone() {
+      setDl(null); load();
+      window.toast({ tone: "success", icon: "zap", title: "Java 25 runtime installed",
+        body: "Turbo is ready — the next launch records the AOT cache." });
+    }
+    function onErr(e) {
+      setDl(null); load();
+      window.toast({ tone: "danger", icon: "alert", title: "Turbo runtime install failed", body: (e.detail && e.detail.error) || "" });
+    }
+    function onEvt(e) {
+      const d = e.detail || {};
+      if (d.id !== instance.id) return;
+      load();
+      if (d.phase === "trained")
+        window.toast({ tone: "success", icon: "zap", title: "Turbo cache built",
+          body: (d.cacheSizeMb || 0) + " MB — every launch now starts from it." });
+      else if (d.phase === "crashed")
+        window.toast({ tone: "danger", icon: "alert", title: "Turbo launch crashed",
+          body: d.message || "Turbo was disabled — normal launch works again." });
+      else if (d.phase === "assembling")
+        window.toast({ tone: "accent", icon: "refresh", title: "Building Turbo cache…",
+          body: d.message || "The AOT cache is being assembled in the background — several minutes on a big pack." });
+      else if (d.phase === "trainIncomplete")
+        window.toast({ tone: "warn", icon: "info", title: "Turbo cache not saved",
+          body: "Quit the game normally (not the Stop button) after a training launch so the cache can be written." });
+    }
+    function onBoot(e) { if (e.detail && e.detail.id === instance.id) load(); }
+    window.addEventListener("cryo:turboProgress", onProg);
+    window.addEventListener("cryo:turboDone",     onDone);
+    window.addEventListener("cryo:turboError",    onErr);
+    window.addEventListener("cryo:turboEvent",    onEvt);
+    window.addEventListener("cryo:bootMeasured",  onBoot);
+    return () => {
+      window.removeEventListener("cryo:turboProgress", onProg);
+      window.removeEventListener("cryo:turboDone",     onDone);
+      window.removeEventListener("cryo:turboError",    onErr);
+      window.removeEventListener("cryo:turboEvent",    onEvt);
+      window.removeEventListener("cryo:bootMeasured",  onBoot);
+    };
+  }, [instance.id]);
+
+  async function toggle(on) {
+    if (!hasBridge) { window.toast({ tone: "warn", icon: "info", title: "Preview mode", body: "Turbo works in the desktop launcher." }); return; }
+    setBusy(true);
+    const r = await api.setTurbo(instance.id, on).catch(() => null);
+    setBusy(false);
+    if (on && r && r.installing)
+      window.toast({ tone: "accent", icon: "zap", title: "Downloading Java 25 runtime…",
+        body: "~50 MB, one time. Turbo activates when it finishes." });
+    await load();
+  }
+
+  async function reset() {
+    if (!window.confirm("Delete the Turbo AOT cache?\n\nThe next Turbo launch will re-record it (one slower training launch).")) return;
+    await api.resetTurbo(instance.id).catch(() => {});
+    await load();
+    window.toast({ tone: "neutral", icon: "refresh", title: "Turbo cache reset", body: "The next launch trains again." });
+  }
+
+  const MODE_META = {
+    "default":  { label: "Default",        color: "var(--text-faint)" },
+    "standard": { label: "Default",        color: "var(--text-faint)" },
+    "training": { label: "Turbo training", color: "#FBBF77" },
+    "turbo":    { label: "Turbo",          color: "var(--acc-2)" },
+  };
+  function ago(t) {
+    const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (m < 1)   return "just now";
+    if (m < 60)  return m + " min ago";
+    if (m < 1440) return Math.round(m / 60) + " h ago";
+    return Math.round(m / 1440) + " d ago";
+  }
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+
+  const boots    = (st && st.boots) || [];
+  const turboAvg = avg(boots.filter(b => b.mode === "turbo").map(b => b.secs));
+  const defAvg   = avg(boots.filter(b => b.mode === "standard" || b.mode === "default").map(b => b.secs));
+  const livePct  = (turboAvg > 0 && defAvg > 0) ? Math.round((1 - turboAvg / defAvg) * 100) : null;
+  const maxBoot  = Math.max(1, ...boots.map(b => b.secs));
+
+  const badge = !st ? null
+    : !st.supported  ? React.createElement(Badge, { tone: "neutral" }, "MC 1.20.5+ only")
+    : !st.enabled    ? React.createElement(Badge, { tone: "neutral" }, "off")
+    : dl             ? React.createElement(Badge, { tone: "warn", icon: "refresh" }, "installing runtime")
+    : !st.javaReady  ? React.createElement(Badge, { tone: "warn" }, "runtime missing")
+    : st.trained     ? React.createElement(Badge, { tone: "success", dot: true }, "ready")
+    : React.createElement(Badge, { tone: "warn", dot: true }, "trains on next launch");
+
+  const stat = (label, value) => React.createElement("div", null,
+    React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", fontWeight: 600, marginBottom: 4 } }, label),
+    React.createElement("div", { className: "tnum", style: { fontSize: 13.5, fontWeight: 600, color: "var(--text)" } }, value));
+
+  const canToggle = st && st.supported && st.engineInstalled && !busy && !dl;
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)", border: "1px solid var(--acc-soft-2)" } },
+    // header
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 6, flexWrap: "wrap" } },
+      React.createElement(Icon, { name: "zap", size: 17, style: { color: "var(--acc-2)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "VSpeed Turbo — Java 25 AOT cache"),
+      badge,
+      st && React.createElement("div", { style: { marginLeft: "auto" } },
+        React.createElement(Toggle, { checked: !!st.enabled, disabled: !canToggle, onChange: toggle }))),
+    React.createElement("p", { style: { margin: "0 0 12px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
+      "Runs the pack on a Java 25 runtime with an ahead-of-time cache: the first Turbo launch records everything the JVM loads and compiles; every launch after starts from that snapshot instead of redoing it. Changing mods re-trains automatically."),
+
+    // gating hints
+    st && !st.supported && React.createElement("div", { style: { padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)" } },
+      "This pack is on Minecraft " + (instance.mc || "< 1.20.5") + " — Turbo needs a Java-21-era pack (MC 1.20.5+)."),
+    st && st.supported && !st.engineInstalled && React.createElement("div", { style: { padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)" } },
+      "Turbo launches through the Cryo engine — install it in the \"Cryo engine\" card below first."),
+
+    // runtime download progress
+    dl && React.createElement("div", { style: { margin: "6px 0 12px" } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 } },
+        React.createElement("span", null, dl.message || "Downloading…"),
+        dl.bytesTotal > 0 && React.createElement("span", { className: "tnum" },
+          Math.round((dl.bytesDone || 0) / 1048576) + " / " + Math.round(dl.bytesTotal / 1048576) + " MB")),
+      React.createElement("div", { style: { height: 8, borderRadius: 6, background: "var(--panel-2)", overflow: "hidden" } },
+        React.createElement("div", { style: { height: "100%", width: (dl.bytesTotal > 0 ? Math.round((dl.bytesDone || 0) / dl.bytesTotal * 100) : 30) + "%", background: "var(--acc-grad)", transition: "width .3s var(--ease)" } }))),
+
+    // last error (e.g. auto-disabled after a Java-25 crash)
+    st && st.lastError && React.createElement("div", { style: { margin: "6px 0 12px", padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--error-dim)", border: "1px solid color-mix(in oklab, var(--error) 30%, transparent)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
+      st.lastError),
+
+    // training hint
+    st && st.enabled && st.javaReady && !st.trained && !dl && React.createElement("div", { style: { margin: "6px 0 12px", padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--acc-soft)", border: "1px solid var(--acc-soft-2)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
+      "Next launch = training launch: it records the cache (can be a touch slower) and saves it when you ",
+      React.createElement("b", null, "quit the game normally"),
+      " — don't force-Stop it. Every launch after that uses the cache."),
+
+    // status grid
+    st && st.enabled && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, margin: "4px 0 12px" } },
+      stat("Runtime", st.javaReady ? ("Temurin " + (st.javaVersion || "25")) : "not installed"),
+      stat("AOT cache", st.trained ? (st.cacheSizeMb + " MB") : "not built yet"),
+      stat("Trained", st.trainedAt > 0 ? ago(st.trainedAt) : "—")),
+
+    // measured boots from real launches
+    boots.length > 0 && React.createElement("div", { style: { marginTop: 4 } },
+      React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 } },
+        React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", fontWeight: 600 } }, "MEASURED BOOTS (to main menu)"),
+        livePct != null && React.createElement("span", { className: "tnum", style: { fontSize: 13, fontWeight: 760, color: livePct > 0 ? "var(--success)" : "var(--text-dim)" } },
+          (livePct > 0 ? "−" : "+") + Math.abs(livePct) + "% vs default")),
+      boots.map((b, i) => {
+        const meta = MODE_META[b.mode] || { label: b.mode, color: "var(--text-faint)" };
+        return React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 5 } },
+          React.createElement("span", { style: { width: 104, fontSize: 11.5, fontWeight: 600, color: meta.color } }, meta.label),
+          React.createElement("div", { style: { flex: 1, height: 16, borderRadius: 5, background: "var(--panel-2)", overflow: "hidden" } },
+            React.createElement("div", { style: { width: Math.max(3, (b.secs / maxBoot) * 100) + "%", height: "100%", background: meta.color, borderRadius: 5, opacity: 0.85 } })),
+          React.createElement("span", { className: "tnum mono", style: { width: 42, textAlign: "right", fontSize: 12, fontWeight: 700 } }, b.secs + "s"),
+          React.createElement("span", { style: { width: 74, textAlign: "right", fontSize: 10.5, color: "var(--text-faint)" } }, ago(b.t)));
+      })),
+
+    // actions
+    st && st.enabled && st.trained && React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } },
+      React.createElement(Btn, { variant: "subtle", size: "sm", icon: "refresh", onClick: reset }, "Reset cache")));
 }
 
 /* ============ CRYO ENGINE CARD ============ */
@@ -461,6 +634,9 @@ function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
         React.createElement(Toggle, { checked: enabled, onChange: setEnabled }),
       ),
     ),
+
+    // VSpeed Turbo (JDK 25 AOT cache) — enable, train, see real boot times
+    React.createElement(TurboCard, { instance, api, hasBridge }),
 
     // benchmark (real measured speed-up + launch modes)
     React.createElement(BenchmarkCard, { instance, api, hasBridge, t, fmt }),

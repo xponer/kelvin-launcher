@@ -187,6 +187,8 @@ function LogsScreen() {
       hasBridge && state === "ready" && !paused && React.createElement("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 700, color: "var(--success)" } },
         React.createElement("span", { style: { width: 7, height: 7, borderRadius: 99, background: "var(--success)", animation: "pulseGlow 1.6s ease-in-out infinite" } }), "LIVE"),
       React.createElement("div", { style: { flex: 1 } }),
+      hasBridge && React.createElement(Btn, { variant: "outline", size: "sm", icon: "terminal",
+        onClick: () => api.openConsole && api.openConsole(instId).catch(() => {}) }, "Pop out"),
       state === "ready" && React.createElement("span", { className: "tnum", style: { fontSize: 12, color: "var(--text-faint)" } }, t("logs.count", { n: filtered.length })),
     ),
 

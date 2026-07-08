@@ -111,6 +111,125 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.0.16 — unreleased — VSpeed Turbo (JDK 25 AOT cache) + working Default-vs-Turbo benchmark
+- **LIVE TEST VERDICT (computer-use, full ATM10 runs):** the Turbo pipeline works END-TO-END —
+  training run boots on Java 25 (158–159 s), graceful close, the JVM writes a ~650 MB training
+  record and assembles a **637 MB AOT cache** — but the measured Turbo run **crashes the JVM
+  deterministically ~64 s in**: `EXCEPTION_ACCESS_VIOLATION` in a **G1 GC worker thread** reading
+  class-name bytes as a pointer (hs_err: RCX contains ASCII descriptor text) with the mapped
+  cache. Reproduced twice at the same point → a JDK 25.0.3 AOT-cache bug on very large caches,
+  not fixable launcher-side. Keep Turbo as an experimental toggle (may work on smaller packs;
+  retest on JDK 25.0.x updates / 26).
+- **Assembly-phase fixes found by the live test** (why "step 3 never started"): in one-command
+  mode the training JVM writes the record AND runs the forked assembler BEFORE exiting — several
+  minutes. (1) Bench's graceful close waited only 90 s then tree-killed the game, killing the
+  assembler mid-work → wait up to 20 min + "assembling" progress push. (2) The exit watcher's
+  fixed 120 s cache wait → `TurboRuntime.FindAssemblyProcess` (turbo-runtime java/javaw proc
+  scan) + `AwaitTrainedCacheAsync` waits while the assembler is actually alive (cap 20 min).
+  (3) `.aot.config` (~650 MB) now deleted after assembly and on reset.
+- **Safety net (verified live):** a JVM NATIVE crash on a turbo/training run at ANY point (not
+  just <60 s) — detected via "A fatal error has been detected" in the engine log tail on nonzero
+  exit — now **auto-disables Turbo, deletes the cache**, and explains in `LastError`. Without
+  this, a trained-but-crashing cache made every subsequent launch crash.
+- **CWD fix:** game process WorkingDirectory now = instance dir (Prism behavior). CmlLib defaults
+  to the shared root, and mods resolving relative "./config/…" paths broke — FancyMenu's
+  IOException → NPE crashed the whole game at LoadingOverlay init; Jupiter/Ice&Fire configs
+  silently failed to load.
+- **Engine-path numbers from the live runs** (boot-to-menu, measured by the log watcher):
+  engine Default (Java 21 + AppCDS) 104–111 s; Java 25 training 158–159 s; Prism path ~110 s.
+  Note: the instance-card Play button still uses the PRISM path unless the instance's engine
+  source is switched to "cryo" (benchmark/Turbo launches use the engine directly).
+- **CRITICAL FIX #3: engine launched the WRONG NeoForge version.** With the arg bugs fixed,
+  ATM10 loaded all the way to menu construction and then EVERY mod failed with
+  `fml.modloadingissue.missingdependency: neoforge [21.1.xxx,) but 21.1.1` — the pack pins
+  **NeoForge 21.1.228** (`mmc-pack.json` `net.neoforged`) but the stored engine version was
+  `neoforge-21.1.1`: `GetNeoForgeVersionsAsync` never sorted (CmlLib order ≠ newest-first; a
+  string sort is also wrong — "21.1.9" > "21.1.172"), so the UI's preselected first entry was
+  ancient. Fixes: (1) **self-heal in `EngineLaunchAsync`** — if the pack pins a NeoForge version
+  and the stored one differs, install the pack's version before launch (SkipIfAlreadyInstalled →
+  no-op once correct) and re-store it; (2) `InstallNeoForge` bridge defaults to `meta.LoaderVer`
+  (pack pin) instead of "latest"; (3) numeric newest-first sort (`VersionSortKey`) in
+  `GetNeoForgeVersionsAsync`. Turbo had auto-disabled again on this crash (message wrongly blamed
+  Java 25) — state reset to enabled/clean after the fix.
+- **CRITICAL FIX #2: duplicate `--gameDir` crashed every modded engine launch.** After the
+  space-split fix, ATM10 got further and ModLauncher threw
+  `joptsimple.MultipleArgumentsForOptionException: Found multiple arguments for option gameDir` —
+  the version json ALREADY emits `--gameDir ${game_directory}` (pointing at the CmlLib root), and
+  `InstallAndLaunchAsync` appended a second one. Fix: **override the variable** via
+  `MLaunchOption.ArgumentDictionary["game_directory"]` instead of appending — verified against the
+  real installed `neoforge-21.1.1` (BuildProcessAsync, no game start): exactly ONE quoted
+  `--gameDir` at the instance dir; assets/libraries stay in the shared root. This means the engine
+  path likely NEVER worked for modded (ModLauncher-based) instances — vanilla was the only tested
+  survivor. Also seen in that log: `-XX:ArchiveClassesAtExit is unsupported when base CDS archive
+  is not loaded` — Microsoft OpenJDK builds ship without a base CDS archive, so AppCDS silently
+  no-ops on the user's Prism-provided "delta" JRE (harmless warning; Turbo replaces it anyway).
+- **Crash auto-diagnose REMOVED (user request)** — the game crashing no longer hijacks the UI into
+  the Assistant with an auto-sent prompt (`app.js` listener deleted; explanatory comment left).
+  Crashes still toast (instance.js), and Logs → "Ask AI" remains the manual path.
+- **Pop-out console window** — new `UI/ConsoleWindow.cs` (code-only WPF, one per instance,
+  re-open focuses): dark monospace live tail of the freshest of `latest.log`/`cryo-engine.log`
+  (LogReader's freshest-file rule, so early JVM aborts are visible), colour-coded per level
+  (ERROR/FATAL red, WARN amber, DEBUG/TRACE dim, stack frames rose), incremental position-based
+  reads (700 ms tick, ≤512 KB/tick, 2000-line rolling cap, wide-page = no wrap-measure cost),
+  seeds the last ~300 lines on open, detects log switch/restart, Auto-scroll + Always-on-top +
+  Clear. Bridge `openConsole` (+ store wrapper); buttons: instance header (terminal icon next to
+  Play) and Logs screen toolbar ("Pop out"). WPF/WinForms name clashes resolved with using-aliases
+  (project links both).
+- **CRITICAL FIX: spaced instance ids/paths broke ALL engine launches** (found live on ATM10 —
+  the JVM aborted in 225 ms with `Could not find or load main class the`). Root cause:
+  `MArgument.FromCommandLine(...)` PARSES a command line and **splits on spaces**, so
+  `-Dvspeed.instance=All the Mods 10 - ATM10` became six tokens ("the" → main class) and
+  `--gameDir <spaced path>` was equally broken. Verified against CmlLib 4.0.6 directly: the
+  single-string ctor `new MArgument(value)` keeps ONE argument and CmlLib quotes it when building.
+  Switched: `-Dvspeed.daemon/-Dvspeed.instance`, AOT cache flags, AppCDS flags (space-guard `if
+  (!jsa.Contains(' '))` removed — now safe), and `--gameDir` in `LauncherCore`. **Convention: only
+  use `FromCommandLine` for tokens that can never contain spaces** (e.g. `--port`). ATM10 had never
+  engine-launched before (old runs went through Prism), which is why this never surfaced — it was
+  NOT a Turbo/Java-25 issue, though Turbo's auto-fallback correctly disabled itself. ATM10's Turbo
+  state was reset (re-enabled, error cleared) after the fix.
+- **VSpeed Turbo** — the new flagship speed-up, replacing AppCDS as the ceiling: runs the pack on
+  a **Temurin 25** runtime with the **Project Leyden AOT cache** (JEP 483/514/515). A **training**
+  launch adds `-XX:AOTCacheOutput=<aot>` (the cache is assembled by a forked JVM at **normal game
+  shutdown** — a force-kill produces no cache, by design); every later launch adds
+  `-XX:AOTCache=<aot>` and skips class loading/linking + most JIT warm-up. New
+  `Core/TurboRuntime.cs`: Temurin 25 JRE auto-download (Adoptium API, JRE→JDK fallback) into
+  `game\runtime\turbo-25\`, per-instance state+cache in `%LocalAppData%\VSpeedLauncher\aot\`
+  (`<id>.aot` + `<id>.json`), cache keyed to a **mods fingerprint** (jar name+size+mtime + loader
+  version — any mod change silently retrains next launch).
+- **Engine launch refactor** — `LaunchWithEngine` is now a wrapper over `EngineLaunchAsync(mode,
+  bootTcs)` (`mode`: "auto" = respect Turbo, "default" = forced standard path for benchmarking).
+  Turbo gating: MC 1.20.5+ (Java 21-era) only, Turbo Java present, no space in the cache path;
+  Turbo launches force the Java 25 runtime (user JavaPath override ignored) and **suppress AppCDS**
+  (the JVM rejects `-XX:SharedArchiveFile` next to the AOT cache). **Auto-fallback:** a startup
+  crash on a Turbo launch disables Turbo (state `LastError` explains) so the instance never bricks
+  — next launch is standard again. Training completion is detected post-exit
+  (`AwaitTrainedCacheAsync` waits ≤120 s for the assembly JVM, checks unlock + mtime).
+- **Boot-to-menu measurement without the pipe mod** (`TurboRuntime.WatchBootAsync`) — tails
+  `cryo-engine.log` for: (1) ModernFix "Game took X.XX seconds to start" (exact), (2) vanilla's
+  "Realms Notification" check (fires right at the title screen), (3) fallback "Sound engine
+  started" + 12 s of log silence. Every engine launch now records its boot time
+  (`bootMeasured` push + rolling window in the Turbo state json).
+- **Auto-Benchmark FIXED + repurposed** — the old one waited on the retired vspeed-loader READY
+  pipe (`AwaitReadyAsync` + Prism `LaunchAsync`) so it always timed out on Cryo-engine instances.
+  Rewritten: **Default (bundled Java + AppCDS) → Turbo training (only if cache missing; closed
+  gracefully via `CloseMainWindow` so the cache can assemble) → Turbo measured**, all via
+  `EngineLaunchAsync` + log-marker detection; 2–3 launches; same `benchmarkProgress` event shape
+  (`bootVanilla`/`bootOptimized`) so existing UI/dashboard keep working. Pre-flight errors state
+  the exact fix (install engine / sign in / enable Turbo / wait for runtime).
+- **Performance tab: Turbo card** (`TurboCard`, above the benchmark) — toggle (auto-downloads the
+  Java 25 runtime with a progress bar), status badge (off / installing runtime / trains on next
+  launch / ready), runtime+cache+trained stats, training hint ("quit normally, don't Stop"),
+  auto-disable error surface, **measured-boots list** (Default vs Turbo bars from real launches +
+  live "−N% vs default" once both exist), Reset cache. Benchmark card copy updated to
+  Default-vs-Turbo. New bridge: `getTurbo` / `setTurbo` / `resetTurbo` (+ store.js); push events:
+  `turboProgress/turboDone/turboError/turboEvent/bootMeasured`.
+- Build clean (0/0), JS `node --check` clean, app smoke-launched with **zero WebError/WebLog**.
+  ⚠️ Not yet exercised against a real game launch (needs sign-in + a 1.20.5+ pack): verify the
+  Turbo toggle → runtime download → training launch → "trained" toast → faster second launch, and
+  the Auto-Benchmark end-to-end. Known limits: AOT caches only builtin-loader classes (mod classes
+  live behind the transforming loader), so expect a solid but not magical gain — the benchmark
+  exists to measure it honestly.
+
 ### v1.0.15 — released (GitHub) — smarter AI assistant + accurate dependency check
 - **AI no longer gives generic bad advice.** Rewrote `AiSystemPrompt` into a real modded-MC
   engineer: knows a healthy pack prints hundreds of benign WARN/exception lines, concludes
