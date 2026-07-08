@@ -1,9 +1,23 @@
 # ❄️ Cryo Launcher
 
-A fast, modern **Minecraft modpack launcher for Windows** — create instances, install
-modpacks from **Modrinth & CurseForge**, manage mods, and launch **without PrismLauncher**.
-Includes a built-in AI assistant, a server browser, world backups, and the **VSpeed**
-startup-optimization engine.
+[![Latest release](https://img.shields.io/github/v/release/xponer/vspeed-cryoLauncher?label=release&color=7c6cf0)](https://github.com/xponer/vspeed-cryoLauncher/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/xponer/vspeed-cryoLauncher/total?color=38bdf8)](https://github.com/xponer/vspeed-cryoLauncher/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](#license)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078d4)
+
+A fast, modern **Minecraft modpack launcher for Windows**, built around one obsession:
+**launching huge modpacks faster**. Create instances, install packs from **Modrinth &
+CurseForge**, manage mods, host a dedicated server, and launch **without PrismLauncher** —
+with the **VSpeed** engine doing the heavy lifting:
+
+| Boot to main menu — All the Mods 10 (479 mods) | |
+|---|---|
+| Default launch | 104–116 s |
+| **VSpeed Turbo** (Java 25 AOT cache) | **75–77 s — about −32%** |
+
+Numbers measured by the launcher's own one-click **Auto-Benchmark** — run it on *your* pack
+and see your own. Around the speed core: a built-in AI crash assistant, a pop-out live game
+console, a server browser, world backups, and one-click speed boosters.
 
 > Native WPF host + WebView2 rendering a React UI, a [CmlLib.Core](https://github.com/CmlLib/CmlLib.Core)
 > launch engine, DPAPI-encrypted Microsoft auth, per-instance Java auto-detection,
@@ -46,6 +60,11 @@ log (Settings → Self-Check → Open launcher log).
   backed up and your worlds are left untouched.
 - **Server browser** with live ping / MOTD / player count, plus a one-click **Join**
   that launches straight into a server.
+- **Host a dedicated server** for any pack — one-click setup from the pack's own mods and
+  config, a live filtered console with command input, and a full `server.properties` editor
+  (NeoForge / Fabric / Vanilla).
+- **Tags, notes & colours** for both mods and whole packs — organize a big library your way,
+  with tag filters everywhere.
 - **AI assistant** — diagnoses crashes, mod conflicts, and lag (bring your own free NVIDIA key).
 - **Pop-out live console** — a separate always-on-top-capable window tailing the game log in
   real time, colour-coded by level. Open it right next to Play and watch the whole boot.
