@@ -289,6 +289,7 @@ public sealed partial class CryoBridge
             "getHistory"      => GetHistory(),
             "getLogs"         => GetLogs(args.Str("id"), args.Int("n", 3000)),
             "getBootTimeline" => GetBootTimeline(args.Str("id")),
+            "getModLoadProfile" => GetModLoadProfile(args.Str("id")),
             "rebuildCache"    => RebuildCache(args.Str("id")),
             "launchInstance"  => LaunchInstance(args.Str("id"), args.Bool("vanilla", false), args.Str("joinServer")),
             "startBenchmark"  => StartBenchmark(args.Str("id")),
@@ -296,8 +297,14 @@ public sealed partial class CryoBridge
             "getTurbo"        => GetTurbo(args.Str("id")),
             "setTurbo"        => SetTurbo(args.Str("id"), args.Bool("on", false)),
             "resetTurbo"      => ResetTurbo(args.Str("id")),
+            "retrainTurbo"    => RetrainTurbo(args.Str("id")),
             "openConsole"     => OpenConsole(args.Str("id")),
             "getSpeedTweaks"      => GetSpeedTweaks(args.Str("id")),
+            "getOptimizeScan"     => GetOptimizeScan(args.Str("id")),
+            "getBisect"           => GetBisect(args.Str("id")),
+            "startBisect"         => StartBisect(args.Str("id")),
+            "cancelBisect"        => CancelBisect(),
+            "restoreBisect"       => RestoreBisect(args.Str("id")),
             "setDynamicResources" => SetDynamicResources(args.Str("id"), args.Bool("on", false)),
             "selfCheck"       => SelfCheck(),
             "getAppVersion"   => GetAppVersion(),
@@ -1160,6 +1167,108 @@ public sealed partial class CryoBridge
         return new { ok = true, totalMs, phases, lineCount = entries.Count };
     }
 
+    private static readonly Regex _mixinFromMod = new(@"from mod (\w[\w-]*)", RegexOptions.Compiled);
+    // debug.log line: [08лип.2026 14:54:17.192] [Datafixer Bootstrap/INFO] [com.mojang.datafixers.DataFixerBuilder/]: msg
+    // (the date part is locale-formatted — only the time-of-day is parsed).
+    private static readonly Regex _debugLine = new(
+        @"^\[[^\]]*?(?<h>\d{2}):(?<m>\d{2}):(?<s>\d{2})\.(?<ms>\d{3})\]\s*\[(?<thread>[^/\]]+)/[A-Z]+\]\s*\[(?<src>[^\]]*)\]:\s*(?<msg>.*)",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Per-mod launch profile, ESTIMATED from debug.log attribution: on each
+    /// thread, the gap between consecutive lines is credited to whichever mod
+    /// logged the later line (single gaps capped at 30 s so idle time can't
+    /// dominate). debug.log is the only game log that carries the source/mod
+    /// field — latest.log and the stdout capture only have thread + level.
+    /// Mods that load slowly but log little are under-counted — this surfaces
+    /// the notorious offenders, it is not a real profiler.
+    /// </summary>
+    private object GetModLoadProfile(string id)
+    {
+        if (!IsSafeSegment(id)) return new { ok = false, error = "Invalid instance." };
+        var path = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft", "logs", "debug.log");
+        if (!File.Exists(path))
+            return new { ok = false, error = "No debug.log for this instance — launch the pack once (NeoForge/Forge write it by default)." };
+
+        static string Bucket(string src, string msg)
+        {
+            var slash = src.IndexOf('/');
+            if (slash >= 0) src = src[..slash];
+            src = src.Trim();
+            if (src.Length == 0) return "(unknown)";
+            if (src.StartsWith("net.minecraft", StringComparison.OrdinalIgnoreCase)
+             || src.StartsWith("com.mojang", StringComparison.OrdinalIgnoreCase)
+             || src.Equals("minecraft", StringComparison.OrdinalIgnoreCase)) return "Minecraft (vanilla)";
+            if (src.StartsWith("net.neoforged", StringComparison.OrdinalIgnoreCase)
+             || src.StartsWith("net.minecraftforge", StringComparison.OrdinalIgnoreCase)
+             || src.StartsWith("cpw.mods", StringComparison.OrdinalIgnoreCase)
+             || src.Equals("FML", StringComparison.OrdinalIgnoreCase)) return "NeoForge / FML";
+            if (src.Equals("mixin", StringComparison.OrdinalIgnoreCase))
+            {
+                var m = _mixinFromMod.Match(msg);
+                return m.Success ? m.Groups[1].Value + " (mixins)" : "Mixins (framework)";
+            }
+            if (src.Equals("STDOUT", StringComparison.OrdinalIgnoreCase)
+             || src.Equals("STDERR", StringComparison.OrdinalIgnoreCase)) return "(console output)";
+            // FQCN loggers ("dev.author.modname.SomeClass") → the modname segment.
+            var parts = src.Split('.');
+            return parts.Length >= 3 ? parts[2] : parts.Length == 2 ? parts[1] : src;
+        }
+
+        var perMod = new Dictionary<string, (long ms, int lines)>(StringComparer.OrdinalIgnoreCase);
+        var lastOnThread = new Dictionary<string, long>(StringComparer.Ordinal);
+        long start = -1, end = -1, dayShift = 0, prevT = -1;
+        int lines = 0;
+
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var sr = new StreamReader(fs);
+            string? line;
+            while ((line = sr.ReadLine()) != null && lines < 400_000)
+            {
+                var m = _debugLine.Match(line);
+                if (!m.Success) continue;   // stack traces / continuations carry no timestamp
+                lines++;
+
+                long t = ((long.Parse(m.Groups["h"].Value) * 60 + long.Parse(m.Groups["m"].Value)) * 60
+                          + long.Parse(m.Groups["s"].Value)) * 1000 + long.Parse(m.Groups["ms"].Value) + dayShift;
+                if (prevT >= 0 && t < prevT - 12 * 3600_000) { dayShift += 24 * 3600_000; t += 24 * 3600_000; } // midnight wrap
+                prevT = t;
+                if (start < 0) start = t;
+                end = t;
+
+                var msg    = m.Groups["msg"].Value;
+                var bucket = Bucket(m.Groups["src"].Value, msg);
+
+                long dt = 0;
+                var thread = m.Groups["thread"].Value;
+                if (lastOnThread.TryGetValue(thread, out var prev))
+                    dt = Math.Clamp(t - prev, 0, 30_000);
+                lastOnThread[thread] = t;
+
+                var cur = perMod.GetValueOrDefault(bucket);
+                perMod[bucket] = (cur.ms + dt, cur.lines + 1);
+
+                if (msg.Contains("seconds to start", StringComparison.OrdinalIgnoreCase)      // ModernFix boot marker
+                 || msg.Contains("Realms Notification", StringComparison.OrdinalIgnoreCase))  // vanilla title screen
+                    break;
+            }
+        }
+        catch (Exception e) { return new { ok = false, error = "Couldn't read debug.log: " + e.Message }; }
+
+        if (lines == 0) return new { ok = false, error = "debug.log has no parseable lines yet — launch the pack once." };
+
+        var mods = perMod
+            .Where(kv => kv.Value.ms >= 200)
+            .OrderByDescending(kv => kv.Value.ms)
+            .Take(20)
+            .Select(kv => new { name = kv.Key, ms = kv.Value.ms, lines = kv.Value.lines })
+            .ToArray();
+
+        return new { ok = true, totalMs = Math.Max(1, end - start), mods, analyzedLines = lines };
+    }
+
     // ── Cache rebuild ─────────────────────────────────────────────────────────
 
     private object RebuildCache(string id)
@@ -1481,8 +1590,11 @@ public sealed partial class CryoBridge
             {
                 cacheSize = fi.Length;
                 // "trained" = the cache matches the CURRENT mods — a mod change silently retrains.
+                // Must include the same jvm-args key the launch path uses, or a pack with
+                // custom JVM args would permanently show "trains on next launch".
+                var argsKey = string.Join(' ', ParseUserJvmArgs(ReadInstanceCfgGeneral(id)));
                 trained = st.Fingerprint.Length > 0
-                       && st.Fingerprint == TurboRuntime.ComputeFingerprint(gameDir, version ?? "");
+                       && st.Fingerprint == TurboRuntime.ComputeFingerprint(gameDir, version ?? "", argsKey);
             }
         }
         catch { /* status only */ }
@@ -1496,6 +1608,10 @@ public sealed partial class CryoBridge
             javaVersion     = javaw != null ? TurboRuntime.InstalledVersion() : "",
             enabled         = st.Enabled,
             trained,
+            // stale = a cache exists but the mods changed since it trained;
+            // launches run standard until the user opts in to retrain.
+            stale           = cacheSize > 0 && st.Fingerprint.Length > 0 && !trained,
+            retrainRequested = st.RetrainRequested,
             cacheSizeMb     = cacheSize / (1024 * 1024),
             trainedAt       = st.TrainedAt,
             lastError       = st.LastError,
@@ -1701,9 +1817,21 @@ public sealed partial class CryoBridge
         try { File.Delete(TurboRuntime.CacheFile(id)); } catch { /* absent is fine */ }
         try { File.Delete(TurboRuntime.CacheConfigFile(id)); } catch { /* absent is fine */ }
         var st = TurboRuntime.LoadState(id);
-        st.Fingerprint = ""; st.TrainedAt = 0; st.LastError = "";
+        st.Fingerprint = ""; st.TrainedAt = 0; st.LastError = ""; st.RetrainRequested = false;
         TurboRuntime.SaveState(id, st);
         Logger.Info($"Turbo cache reset for {id}");
+        return new { ok = true };
+    }
+
+    /// <summary>Opt-in retrain of a STALE cache (mods changed since training):
+    /// the next Turbo launch becomes a training run instead of a standard one.</summary>
+    private object RetrainTurbo(string id)
+    {
+        var st = TurboRuntime.LoadState(id);
+        if (!st.Enabled) return new { ok = false, error = "Turbo is off for this instance." };
+        st.RetrainRequested = true;
+        TurboRuntime.SaveState(id, st);
+        Logger.Info($"Turbo retrain requested for {id}");
         return new { ok = true };
     }
 
@@ -1739,9 +1867,19 @@ public sealed partial class CryoBridge
             if (inst.State != InstanceState.Stopped) { _manager.Kill(inst); await Task.Delay(3000, ct); }
 
             var  gameDir      = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft");
-            var  fp           = TurboRuntime.ComputeFingerprint(gameDir, versionName);
+            // Same jvm-args key the launch path uses — otherwise needTraining and the
+            // trained-state wait below never match for packs with custom JVM args.
+            var  argsKey      = string.Join(' ', ParseUserJvmArgs(ReadInstanceCfgGeneral(id)));
+            var  fp           = TurboRuntime.ComputeFingerprint(gameDir, versionName, argsKey);
             bool needTraining = !(File.Exists(TurboRuntime.CacheFile(id)) && TurboRuntime.LoadState(id).Fingerprint == fp);
             int  total        = needTraining ? 3 : 2;
+            if (needTraining)
+            {
+                // Running the benchmark IS consent to retrain — otherwise a stale
+                // cache would make the "training" step silently launch standard.
+                var pre = TurboRuntime.LoadState(id);
+                if (!pre.RetrainRequested) { pre.RetrainRequested = true; TurboRuntime.SaveState(id, pre); }
+            }
 
             Push("benchmarkProgress", new {
                 phase = "start", step = 0, totalSteps = total,
@@ -2251,6 +2389,90 @@ Example for an unknown error:
         ["forge"]    = new[] { "embeddium", "ferrite-core", "modernfix", "saturn", "canary" },
         ["neoforge"] = new[] { "embeddium", "ferrite-core", "modernfix", "saturn" },
     };
+
+    /// <summary>Jar-name prefixes for detecting curated perf mods already in mods/
+    /// (dashes/underscores stripped on both sides before the prefix match).</summary>
+    private static readonly Dictionary<string, string[]> PerfModJarPrefixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["sodium"]          = new[] { "sodium" },
+        ["lithium"]         = new[] { "lithium" },
+        ["ferrite-core"]    = new[] { "ferritecore" },
+        ["modernfix"]       = new[] { "modernfix" },
+        ["entityculling"]   = new[] { "entityculling" },
+        ["dynamic-fps"]     = new[] { "dynamicfps" },
+        ["immediatelyfast"] = new[] { "immediatelyfast" },
+        ["krypton"]         = new[] { "krypton" },
+        ["embeddium"]       = new[] { "embeddium" },
+        ["saturn"]          = new[] { "saturn" },
+        ["canary"]          = new[] { "canary" },
+    };
+
+    /// <summary>
+    /// One-call state report for the Pack Optimizer card: which curated perf mods
+    /// are present, ModernFix/dynamic-resources state, Defender exclusion, RAM vs
+    /// recommendation, custom JVM args, and Turbo support/state. The card composes
+    /// fixes out of existing bridge calls — this only has to observe.
+    /// </summary>
+    private object GetOptimizeScan(string id)
+    {
+        if (!IsSafeSegment(id)) return new { ok = false, error = "Invalid instance." };
+        var meta    = InstanceMetaReader.Read(id, InstanceDataDir(id));
+        var loader  = (meta.Loader ?? "").ToLowerInvariant();
+        var instDir = Path.Combine(InstanceDataDir(id), "instances", id);
+        var modsDir = Path.Combine(instDir, "minecraft", "mods");
+
+        string[] jars;
+        try
+        {
+            jars = Directory.Exists(modsDir)
+                ? Directory.EnumerateFiles(modsDir, "*.jar").Select(f => Path.GetFileName(f)!).ToArray()
+                : Array.Empty<string>();
+        }
+        catch { jars = Array.Empty<string>(); }
+        static string Norm(string s) => s.Replace("-", "").Replace("_", "");
+
+        var curated  = PerfModSlugs.GetValueOrDefault(loader) ?? Array.Empty<string>();
+        var perfMods = curated.Select(slug =>
+        {
+            var prefixes = PerfModJarPrefixes.GetValueOrDefault(slug) ?? new[] { Norm(slug) };
+            bool installed = jars.Any(j => prefixes.Any(p =>
+                Norm(j).StartsWith(p, StringComparison.OrdinalIgnoreCase)));
+            return new { slug, installed };
+        }).ToArray();
+
+        bool modernfix = jars.Any(j => j.StartsWith("modernfix", StringComparison.OrdinalIgnoreCase));
+        bool dynRes = false;
+        try
+        {
+            var props = ModernFixPropsPath(id);
+            if (File.Exists(props))
+                dynRes = File.ReadAllLines(props).Any(l => l.Trim().Replace(" ", "") == "mixin.perf.dynamic_resources=true");
+        }
+        catch { /* status only */ }
+
+        var cfgKv       = ReadInstanceCfgGeneral(id);
+        bool ramExplicit = cfgKv.ContainsKey("MaxMemAlloc");
+        int  recommended = RecommendRamMb(meta.ModCount, SystemRamMb());
+        int  javaMajor   = JavaMajorForMc(meta.Mc);
+
+        return new
+        {
+            ok = true,
+            loader, mc = meta.Mc, modCount = meta.ModCount,
+            perfMods,
+            modernfixInstalled = modernfix,
+            dynamicResources   = dynRes,
+            defenderExcluded   = LoadDefenderRecord().Contains(instDir, StringComparer.OrdinalIgnoreCase),
+            ramMax             = meta.RamMax,
+            ramExplicit,
+            recommendedRam     = recommended,
+            // Not explicit = the engine now auto-sizes at launch, so RAM is fine either way.
+            ramOk              = !ramExplicit || meta.RamMax >= recommended,
+            hasCustomJvmArgs   = ParseUserJvmArgs(cfgKv).Count > 0,
+            turboSupported     = javaMajor >= 21,
+            turboEnabled       = TurboRuntime.LoadState(id).Enabled,
+        };
+    }
 
     /// <summary>Installs the curated VSpeed performance mods for the instance's loader
     /// into mods/ (latest compatible version each, plus required deps one level deep).
@@ -4393,6 +4615,84 @@ Example for an unknown error:
 
     /// <summary>Reads the user-configured Java path (javaw.exe) from an instance's
     /// instance.cfg <c>[General]</c> section, or <c>""</c> if unset.</summary>
+    // ── Smart JVM defaults (engine path) ─────────────────────────────────────
+
+    /// <summary>
+    /// G1 tuning applied when the user has no custom JVM args: Aikar's core set
+    /// (the modded-MC community standard, valid on Java 8→25) + string
+    /// deduplication (mod loading churns huge numbers of duplicate strings from
+    /// registry/resource names). UnlockExperimentalVMOptions must precede the
+    /// experimental G1NewSizePercent pair. GC tuning does not affect AOT-cache
+    /// validity, so the same set is safe on standard/training/turbo runs.
+    /// </summary>
+    private static readonly string[] SmartGcFlags =
+    {
+        "-XX:+UnlockExperimentalVMOptions",
+        "-XX:+UseG1GC",
+        "-XX:+ParallelRefProcEnabled",
+        "-XX:MaxGCPauseMillis=200",
+        "-XX:+PerfDisableSharedMem",
+        "-XX:G1NewSizePercent=30",
+        "-XX:G1MaxNewSizePercent=40",
+        "-XX:G1HeapRegionSize=8M",
+        "-XX:G1ReservePercent=20",
+        "-XX:G1HeapWastePercent=5",
+        "-XX:G1MixedGCCountTarget=4",
+        "-XX:InitiatingHeapOccupancyPercent=15",
+        "-XX:SurvivorRatio=32",
+        "-XX:MaxTenuringThreshold=1",
+        "-XX:+UseStringDeduplication",
+    };
+
+    /// <summary>
+    /// The user's JvmArgs from instance.cfg (what Prism and our Settings save),
+    /// honoured unless OverrideJavaArgs=false. -Xmx/-Xms tokens are dropped —
+    /// heap always comes from the RAM settings, otherwise CmlLib's own -Xmx
+    /// would duplicate them with undefined precedence.
+    /// </summary>
+    private static List<string> ParseUserJvmArgs(Dictionary<string, string> cfgKv)
+    {
+        if (cfgKv.TryGetValue("OverrideJavaArgs", out var ov)
+            && ov.Trim().Equals("false", StringComparison.OrdinalIgnoreCase))
+            return new List<string>();
+        var raw = cfgKv.GetValueOrDefault("JvmArgs", "").Trim();
+        if (raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"') raw = raw[1..^1];
+        var toks = TokenizeArgs(raw);
+        toks.RemoveAll(t => t.StartsWith("-Xmx", StringComparison.OrdinalIgnoreCase)
+                         || t.StartsWith("-Xms", StringComparison.OrdinalIgnoreCase));
+        return toks;
+    }
+
+    /// <summary>Splits a command-line string on whitespace, honouring double quotes.</summary>
+    private static List<string> TokenizeArgs(string s)
+    {
+        var list = new List<string>();
+        var cur = new System.Text.StringBuilder();
+        bool inQ = false;
+        foreach (var c in s)
+        {
+            if (c == '"') { inQ = !inQ; continue; }
+            if (!inQ && char.IsWhiteSpace(c))
+            {
+                if (cur.Length > 0) { list.Add(cur.ToString()); cur.Clear(); }
+            }
+            else cur.Append(c);
+        }
+        if (cur.Length > 0) list.Add(cur.ToString());
+        return list;
+    }
+
+    /// <summary>C# mirror of the UI's recommendRamMb (instance-tabs.js) — keep in sync.</summary>
+    private static int RecommendRamMb(int mods, long sysRamMb)
+    {
+        long want = mods >= 350 ? 10240 : mods >= 200 ? 8192 : mods >= 100 ? 6144 : mods >= 30 ? 4096 : 3072;
+        long sys = sysRamMb > 0 ? sysRamMb : 8192;
+        long headroom = sys >= 16384 ? 4096 : Math.Max(2048, sys / 4);
+        long ceiling = Math.Max(2048, sys - headroom);
+        want = Math.Min(Math.Min(want, ceiling), 16384);
+        return (int)Math.Max(2048, want / 512 * 512);
+    }
+
     private string ReadInstanceJavaPath(string instanceId)
     {
         var cfgPath = Path.Combine(InstanceDataDir(instanceId), "instances", instanceId, "instance.cfg");
@@ -4808,6 +5108,24 @@ Example for an unknown error:
                 };
                 int javaMajor = JavaMajorForMc(meta.Mc);
 
+                // ── User JVM args + smart GC defaults ────────────────────────
+                // instance.cfg JvmArgs (what Prism and our Settings/Optimize
+                // write) used to be read only by the settings UI — engine
+                // launches ignored it, so the One-click Optimize preset never
+                // reached the JVM. User args now apply verbatim; when there are
+                // none, the SmartGcFlags G1 set applies instead.
+                var cfgKv = ReadInstanceCfgGeneral(instanceId);
+                var userJvmArgs = ParseUserJvmArgs(cfgKv);
+                if (userJvmArgs.Count > 0)
+                {
+                    foreach (var a in userJvmArgs)
+                        extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument(a));
+                    Logger.Info($"JVM: applying {userJvmArgs.Count} user arg(s) from instance.cfg");
+                }
+                else
+                    foreach (var a in SmartGcFlags)
+                        extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument(a));
+
                 // ── VSpeed Turbo (JDK 25 AOT cache, Project Leyden) ──────────
                 // "training": -XX:AOTCacheOutput records this run; the cache is
                 // assembled by a forked JVM at normal shutdown (a force-kill
@@ -4826,16 +5144,43 @@ Example for an unknown error:
                     else
                     {
                         Directory.CreateDirectory(TurboRuntime.AotDir);
-                        turboFp = TurboRuntime.ComputeFingerprint(gameDir, versionName);
-                        bool cacheValid = File.Exists(turboCache)
-                                       && TurboRuntime.LoadState(instanceId).Fingerprint == turboFp;
-                        vspeedMode = cacheValid ? "turbo" : "training";
-                        extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument(
-                            cacheValid ? $"-XX:AOTCache={turboCache}" : $"-XX:AOTCacheOutput={turboCache}"));
-                        Logger.Info($"Turbo {vspeedMode} launch for {instanceId} (fp={turboFp})");
-                        Push("engineProgress", new { phase = "turbo", message = cacheValid
-                            ? "VSpeed Turbo: launching from the AOT cache…"
-                            : "VSpeed Turbo: training run — quit the game normally so the cache gets saved." });
+                        // User JVM args join the fingerprint: editing them between
+                        // training and cache runs would hand the JVM a cache built
+                        // under different flags (rejected at best) — retrain instead.
+                        turboFp = TurboRuntime.ComputeFingerprint(gameDir, versionName, string.Join(' ', userJvmArgs));
+                        var tst = TurboRuntime.LoadState(instanceId);
+                        bool cacheValid = File.Exists(turboCache) && tst.Fingerprint == turboFp;
+                        bool cacheStale = File.Exists(turboCache) && tst.Fingerprint.Length > 0 && !cacheValid;
+
+                        if (cacheValid) vspeedMode = "turbo";
+                        else if (cacheStale && !tst.RetrainRequested)
+                        {
+                            // Mods changed since training. A silent retrain would make THIS
+                            // launch ~50% slower with zero warning — launch standard instead
+                            // and let the user opt in from the Turbo card when ready.
+                            vspeedMode = "standard";
+                            Logger.Info($"Turbo cache STALE for {instanceId} (mods changed) — standard launch, retrain is opt-in");
+                            Push("turboEvent", new { id = instanceId, phase = "stale",
+                                message = "Mods changed since Turbo trained — launching without the cache. Click Retrain in the Turbo card to rebuild it." });
+                        }
+                        else vspeedMode = "training";   // first-ever training (or explicit retrain)
+
+                        if (vspeedMode != "standard")
+                        {
+                            extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument(
+                                cacheValid ? $"-XX:AOTCache={turboCache}" : $"-XX:AOTCacheOutput={turboCache}"));
+                            // Compact Object Headers (JEP 519, production in JDK 25): 8-byte
+                            // instead of 12-byte headers — modded loading allocates hundreds of
+                            // millions of small objects, so this cuts heap + GC work during boot.
+                            // The AOT cache records object layout, so the flag MUST be identical
+                            // on training and cache runs, and it participates in the fingerprint
+                            // (TurboRuntime.FlagsVersion) so pre-existing caches retrain.
+                            extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument("-XX:+UseCompactObjectHeaders"));
+                            Logger.Info($"Turbo {vspeedMode} launch for {instanceId} (fp={turboFp})");
+                            Push("engineProgress", new { phase = "turbo", message = cacheValid
+                                ? "VSpeed Turbo: launching from the AOT cache…"
+                                : "VSpeed Turbo: training run — quit the game normally so the cache gets saved." });
+                        }
                     }
                 }
 
@@ -4898,8 +5243,20 @@ Example for an unknown error:
                 var extraGame = BuildJoinGameArgs(meta.Mc, joinServer);
                 if (extraGame.Count > 0) Push("engineProgress", new { phase = "join", message = $"Will join {joinServer} on launch…" });
 
+                // Heap: an explicit MaxMemAlloc in instance.cfg wins; otherwise
+                // auto-size from the pack's mod count + installed RAM (mirrors
+                // the UI's recommendRamMb — the old flat 8 GB default starved
+                // 400-mod packs and over-allocated tiny ones). Xms = half of Xmx
+                // cuts heap-resize GCs during mod loading without grabbing the
+                // whole heap upfront.
+                int xmxMb = cfgKv.ContainsKey("MaxMemAlloc") && meta.RamMax > 0
+                    ? meta.RamMax
+                    : RecommendRamMb(meta.ModCount, SystemRamMb());
+                int xmsMb = Math.Clamp(Math.Max(meta.RamMin, xmxMb / 2), 1024, xmxMb);
+                Logger.Info($"JVM heap: Xmx={xmxMb} MB, Xms={xmsMb} MB (mods={meta.ModCount}, explicit={cfgKv.ContainsKey("MaxMemAlloc")})");
+
                 var proc = await core.InstallAndLaunchAsync(
-                    versionName, session, meta.RamMax > 0 ? meta.RamMax : 4096,
+                    versionName, session, xmxMb, minRamMb: xmsMb,
                     gameDir: gameDir, javaPath: javaExe, extraJvmArgs: extraJvm, stdoutLog: engineLog,
                     extraGameArgs: extraGame);
 
@@ -5030,9 +5387,10 @@ Example for an unknown error:
                         if (size > 0)
                         {
                             var st = TurboRuntime.LoadState(instanceId);
-                            st.Fingerprint = turboFp;
-                            st.TrainedAt   = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                            st.LastError   = "";
+                            st.Fingerprint      = turboFp;
+                            st.TrainedAt        = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                            st.LastError        = "";
+                            st.RetrainRequested = false;   // fulfilled
                             TurboRuntime.SaveState(instanceId, st);
                             Logger.Info($"Turbo trained for {instanceId}: {size / (1024 * 1024)} MB AOT cache");
                             Push("turboEvent", new { id = instanceId, phase = "trained", cacheSizeMb = size / (1024 * 1024) });
@@ -5284,11 +5642,13 @@ Example for an unknown error:
 
     // ── Instance config (instance.cfg) ───────────────────────────────────────
 
-    private object GetInstanceCfg(string id)
+    /// <summary>All [General] key=value pairs from instance.cfg (empty when absent/unreadable).</summary>
+    private Dictionary<string, string> ReadInstanceCfgGeneral(string id)
     {
         var cfgPath = Path.Combine(InstanceDataDir(id), "instances", id, "instance.cfg");
         var kv = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (File.Exists(cfgPath))
+        if (!File.Exists(cfgPath)) return kv;
+        try
         {
             bool inGeneral = true;
             foreach (var raw in File.ReadAllLines(cfgPath))
@@ -5300,6 +5660,13 @@ Example for an unknown error:
                 if (eq > 0) kv[l[..eq]] = l[(eq + 1)..];
             }
         }
+        catch { /* unreadable cfg → treat as empty */ }
+        return kv;
+    }
+
+    private object GetInstanceCfg(string id)
+    {
+        var kv = ReadInstanceCfgGeneral(id);
         // Prism wraps space-containing JvmArgs in quotes — strip them for clean chips.
         var jvmRaw = kv.GetValueOrDefault("JvmArgs", "").Trim();
         if (jvmRaw.Length >= 2 && jvmRaw.StartsWith("\"") && jvmRaw.EndsWith("\""))

@@ -65,6 +65,10 @@ public static class TurboRuntime
         /// <summary>Unix ms of the last successful training, 0 = never.</summary>
         public long   TrainedAt   { get; set; }
         public string LastError   { get; set; } = "";
+        /// <summary>User opted in to retrain a STALE cache on the next launch.
+        /// (A stale cache — mods changed since training — otherwise launches
+        /// standard instead of springing a slow training run on the user.)</summary>
+        public bool   RetrainRequested { get; set; }
         /// <summary>Rolling window of measured boot-to-menu times.</summary>
         public List<BootRecord> Boots { get; set; } = new();
     }
@@ -123,9 +127,18 @@ public static class TurboRuntime
     /// (name + size + mtime) + the loader version name. No content hashing —
     /// 400 jars must stay a few-ms operation on every launch.
     /// </summary>
-    public static string ComputeFingerprint(string gameDir, string versionName)
+    /// <summary>
+    /// Bump when the set of JVM flags on turbo/training launches changes in a way
+    /// that affects the AOT cache (e.g. object layout). A bump changes every
+    /// fingerprint → all instances silently retrain on their next Turbo launch
+    /// instead of the JVM rejecting the stale cache at startup.
+    /// v2: +UseCompactObjectHeaders (JEP 519).
+    /// </summary>
+    public const string FlagsVersion = "v2";
+
+    public static string ComputeFingerprint(string gameDir, string versionName, string jvmArgsKey = "")
     {
-        var sb = new StringBuilder(versionName ?? "");
+        var sb = new StringBuilder("flags:" + FlagsVersion + "|args:" + jvmArgsKey + "|").Append(versionName ?? "");
         try
         {
             var mods = Path.Combine(gameDir, "mods");

@@ -269,8 +269,16 @@ function createBridgeApi() {
     async getTurbo(id)                 { return call("getTurbo", { id }); },
     async setTurbo(id, on)             { return call("setTurbo", { id, on: !!on }); },
     async resetTurbo(id)               { return call("resetTurbo", { id }); },
+    async retrainTurbo(id)             { return call("retrainTurbo", { id }); },
     // ── Speed boosters (Defender exclusion · ModernFix dynamic resources) ──────
     async getSpeedTweaks(id)           { return call("getSpeedTweaks", { id }); },
+    async getOptimizeScan(id)          { return call("getOptimizeScan", { id }); },
+    async getModLoadProfile(id)        { return call("getModLoadProfile", { id }, 30000); },
+    // ── Crash bisector (find the broken mod) — progress via cryo:bisectEvent ───
+    async getBisect(id)                { return call("getBisect", { id }); },
+    async startBisect(id)              { return call("startBisect", { id }); },
+    async cancelBisect()               { return call("cancelBisect"); },
+    async restoreBisect(id)            { return call("restoreBisect", { id }); },
     async setDynamicResources(id, on)  { return call("setDynamicResources", { id, on: !!on }); },
     // Long timeout: waits for the user to answer the Windows UAC prompt.
     async addDefenderExclusion(id)     { return call("addDefenderExclusion", { id }, 180000); },

@@ -227,6 +227,9 @@ function TurboCard({ instance, api, hasBridge }) {
       else if (d.phase === "trainIncomplete")
         window.toast({ tone: "warn", icon: "info", title: "Turbo cache not saved",
           body: "Quit the game normally (not the Stop button) after a training launch so the cache can be written." });
+      else if (d.phase === "stale")
+        window.toast({ tone: "warn", icon: "info", title: "Turbo cache outdated",
+          body: d.message || "Mods changed — launching without the cache. Retrain from the Turbo card when ready." });
     }
     function onBoot(e) { if (e.detail && e.detail.id === instance.id) load(); }
     window.addEventListener("cryo:turboProgress", onProg);
@@ -252,6 +255,16 @@ function TurboCard({ instance, api, hasBridge }) {
       window.toast({ tone: "accent", icon: "zap", title: "Downloading Java 25 runtime…",
         body: "~50 MB, one time. Turbo activates when it finishes." });
     await load();
+  }
+
+  async function retrain() {
+    const r = await api.retrainTurbo(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    await load();
+    if (r && r.ok)
+      window.toast({ tone: "accent", icon: "zap", title: "Retrain scheduled",
+        body: "The next launch records a fresh AOT cache — quit the game normally so it can save." });
+    else
+      window.toast({ tone: "warn", icon: "info", title: "Couldn't schedule retrain", body: (r && r.error) || "" });
   }
 
   async function reset() {
@@ -291,6 +304,7 @@ function TurboCard({ instance, api, hasBridge }) {
     : dl             ? React.createElement(Badge, { tone: "warn", icon: "refresh" }, "installing runtime")
     : !st.javaReady  ? React.createElement(Badge, { tone: "warn" }, "runtime missing")
     : st.trained     ? React.createElement(Badge, { tone: "success", dot: true }, "ready")
+    : st.stale       ? React.createElement(Badge, { tone: "warn", dot: true }, st.retrainRequested ? "retrains on next launch" : "cache outdated")
     : React.createElement(Badge, { tone: "warn", dot: true }, "trains on next launch");
 
   const stat = (label, value) => React.createElement("div", null,
@@ -308,7 +322,7 @@ function TurboCard({ instance, api, hasBridge }) {
       st && React.createElement("div", { style: { marginLeft: "auto" } },
         React.createElement(Toggle, { checked: !!st.enabled, disabled: !canToggle, onChange: toggle }))),
     React.createElement("p", { style: { margin: "0 0 12px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "Runs the pack on a Java 25 runtime with an ahead-of-time cache: the first Turbo launch records everything the JVM loads and compiles; every launch after starts from that snapshot instead of redoing it. Changing mods re-trains automatically."),
+      "Runs the pack on a Java 25 runtime with an ahead-of-time cache: the first Turbo launch records everything the JVM loads and compiles; every launch after starts from that snapshot instead of redoing it. When mods change, the cache goes stale and YOU choose when to retrain — no surprise slow launches."),
 
     // gating hints
     st && !st.supported && React.createElement("div", { style: { padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)" } },
@@ -329,8 +343,14 @@ function TurboCard({ instance, api, hasBridge }) {
     st && st.lastError && React.createElement("div", { style: { margin: "6px 0 12px", padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--error-dim)", border: "1px solid color-mix(in oklab, var(--error) 30%, transparent)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
       st.lastError),
 
+    // stale cache: mods changed → standard launches until the user opts in to retrain
+    st && st.enabled && st.stale && !st.retrainRequested && !dl && React.createElement("div", { style: { margin: "6px 0 12px", padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--warn-dim)", border: "1px solid color-mix(in oklab, var(--warn) 28%, transparent)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
+      React.createElement("div", { style: { marginBottom: 8 } },
+        "Mods changed since the cache was trained — launches run ", React.createElement("b", null, "without"), " the cache for now. Retrain when you're done changing mods (one slower launch, then Turbo is back)."),
+      React.createElement(Btn, { variant: "outline", size: "sm", icon: "zap", onClick: retrain }, "Retrain on next launch")),
+
     // training hint
-    st && st.enabled && st.javaReady && !st.trained && !dl && React.createElement("div", { style: { margin: "6px 0 12px", padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--acc-soft)", border: "1px solid var(--acc-soft-2)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
+    st && st.enabled && st.javaReady && !st.trained && (!st.stale || st.retrainRequested) && !dl && React.createElement("div", { style: { margin: "6px 0 12px", padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--acc-soft)", border: "1px solid var(--acc-soft-2)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
       "Next launch = training launch: it records the cache (can be a touch slower) and saves it when you ",
       React.createElement("b", null, "quit the game normally"),
       " — don't force-Stop it. Every launch after that uses the cache."),
@@ -338,7 +358,8 @@ function TurboCard({ instance, api, hasBridge }) {
     // status grid
     st && st.enabled && React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, margin: "4px 0 12px" } },
       stat("Runtime", st.javaReady ? ("Temurin " + (st.javaVersion || "25")) : "not installed"),
-      stat("AOT cache", st.trained ? (st.cacheSizeMb + " MB") : "not built yet"),
+      stat("AOT cache", st.trained ? (st.cacheSizeMb + " MB")
+                       : st.stale  ? (st.cacheSizeMb + " MB (outdated)") : "not built yet"),
       stat("Trained", st.trainedAt > 0 ? ago(st.trainedAt) : "—")),
 
     // measured boots from real launches
@@ -358,11 +379,181 @@ function TurboCard({ instance, api, hasBridge }) {
       })),
 
     // actions
-    st && st.enabled && st.trained && React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } },
+    st && st.enabled && (st.trained || st.stale) && React.createElement("div", { style: { display: "flex", gap: 10, marginTop: 10 } },
       React.createElement(Btn, { variant: "subtle", size: "sm", icon: "refresh", onClick: reset }, "Reset cache")));
 }
 
 /* ============ SPEED BOOSTERS (Defender · ModernFix dynamic resources) ============ */
+/* ============ PACK OPTIMIZER (one-click scan + fix + measure) ============ */
+function PackOptimizerCard({ instance, api, hasBridge }) {
+  const [scan, setScan] = tS(null);   // getOptimizeScan result
+  const [busy, setBusy] = tS("");     // "" | "mods" | "dynres" | "ram" | "defender" | "turbo" | "all"
+  const [prog, setProg] = tS(null);   // perf-pack progress message
+  const [ranAll, setRanAll] = tS(false);
+
+  async function load() {
+    if (!hasBridge || !api.getOptimizeScan) return;
+    const r = await api.getOptimizeScan(instance.id).catch(() => null);
+    if (r && r.ok) setScan(r);
+  }
+  tE(() => { load(); }, [hasBridge, instance.id]);
+
+  tE(() => {
+    function onProg(e) { const d = e.detail || {}; setProg(d.message || ""); }
+    window.addEventListener("cryo:perfPackProgress", onProg);
+    return () => window.removeEventListener("cryo:perfPackProgress", onProg);
+  }, []);
+
+  function waitPerfPackDone(timeoutMs) {
+    return new Promise((resolve) => {
+      let tmr;
+      function onDone(e) { cleanup(); resolve(e.detail || { ok: false }); }
+      function cleanup() { window.removeEventListener("cryo:perfPackDone", onDone); clearTimeout(tmr); }
+      window.addEventListener("cryo:perfPackDone", onDone);
+      tmr = setTimeout(() => { cleanup(); resolve({ ok: false, error: "Timed out waiting for the installer." }); }, timeoutMs || 600000);
+    });
+  }
+
+  const missing     = scan ? (scan.perfMods || []).filter(m => !m.installed) : [];
+  const needsMods   = missing.length > 0;
+  const needsDynRes = !!(scan && scan.modernfixInstalled && !scan.dynamicResources);
+  const needsRam    = !!(scan && !scan.ramOk);
+  const needsDef    = !!(scan && !scan.defenderExcluded);
+  const needsTurbo  = !!(scan && scan.turboSupported && !scan.turboEnabled);
+  const issueCount  = (needsMods ? 1 : 0) + (needsDynRes ? 1 : 0) + (needsRam ? 1 : 0) + (needsDef ? 1 : 0) + (needsTurbo ? 1 : 0);
+
+  // Raw steps (no busy management) so "Optimize everything" can chain them.
+  async function doMods() {
+    setProg("Starting…");
+    await api.installPerformancePack(instance.id).catch(() => null);
+    const r = await waitPerfPackDone();
+    setProg(null);
+    if (!r.ok) window.toast({ tone: "warn", icon: "info", title: "Perf mods incomplete", body: r.error || "" });
+    return r.ok;
+  }
+  async function doDynRes() {
+    const r = await api.setDynamicResources(instance.id, true).catch(() => null);
+    return !!(r && r.ok);
+  }
+  async function doRam() {
+    const ram = scan.recommendedRam;
+    const r = await api.saveInstanceCfg(instance.id, { ramMax: ram, ramMin: ram }).catch(() => null);
+    return !!(r && r.ok);
+  }
+  async function doDefender() {
+    const r = await api.addDefenderExclusion(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    if (!(r && r.ok)) window.toast({ tone: "warn", icon: "info", title: "Defender exclusion skipped", body: (r && r.error) || "" });
+    return !!(r && r.ok);
+  }
+  async function doTurbo() {
+    const r = await api.setTurbo(instance.id, true).catch(() => null);
+    return !!(r && r.ok);
+  }
+
+  async function fixOne(key, fn) {
+    setBusy(key);
+    try { await fn(); } finally { setBusy(""); }
+    await load();
+  }
+
+  async function optimizeAll() {
+    const steps = [];
+    if (needsMods)   steps.push("install " + missing.length + " performance mod(s) — " + missing.map(m => m.slug).join(", "));
+    if (needsDynRes || needsMods) steps.push("enable ModernFix dynamic resources (models load on demand)");
+    if (needsRam)    steps.push("set memory to the recommended " + (scan.recommendedRam / 1024).toFixed(1) + " GB");
+    if (needsTurbo)  steps.push("enable VSpeed Turbo (downloads the Java 25 runtime; trains on next launch)");
+    if (needsDef)    steps.push("exclude this instance from Windows Defender scanning (admin prompt)");
+    if (!steps.length) return;
+    const ok = window.confirm("Optimize \"" + (instance.name || instance.id) + "\"?\n\nThis will:\n• " + steps.join("\n• ") +
+      "\n\nEverything is reversible (Mods tab / Performance tab / instance Settings).");
+    if (!ok) return;
+
+    setBusy("all");
+    try {
+      let modsLanded = false;
+      if (needsMods)   modsLanded = await doMods();
+      // ModernFix may have just been installed by the perf pack — re-check on the fly.
+      if (needsDynRes || (modsLanded && missing.some(m => m.slug === "modernfix"))) await doDynRes();
+      if (needsRam)    await doRam();
+      if (needsTurbo)  await doTurbo();
+      if (needsDef)    await doDefender();   // last: it pops the UAC prompt
+    } finally { setBusy(""); }
+    setRanAll(true);
+    await load();
+    window.toast({ tone: "success", icon: "zap", title: "Pack optimized",
+      body: "Now run the Auto-Benchmark below to measure the difference on a real launch." });
+  }
+
+  const row = (okState, title, desc, control) => React.createElement("div",
+    { style: { display: "flex", alignItems: "center", gap: 14, padding: "9px 0", borderBottom: "1px solid var(--border)" } },
+    React.createElement("div", { style: { width: 22, display: "grid", placeItems: "center", flexShrink: 0 } },
+      React.createElement(Icon, { name: okState ? "check" : "alert", size: 15,
+        style: { color: okState ? "var(--success)" : "var(--warn)" } })),
+    React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+      React.createElement("div", { style: { fontSize: 13.5, fontWeight: 650 } }, title),
+      React.createElement("div", { style: { fontSize: 12, color: "var(--text-faint)", marginTop: 2, lineHeight: 1.45 } }, desc)),
+    control);
+
+  const fixBtn = (key, label, fn) => React.createElement(Btn,
+    { variant: "outline", size: "sm", icon: busy === key ? "loader" : "zap", iconSpin: busy === key,
+      disabled: !!busy, onClick: () => fixOne(key, fn) }, busy === key ? "Working…" : label);
+  const okBadge = React.createElement(Badge, { tone: "success", dot: true }, "OK");
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 4 } },
+      React.createElement(Icon, { name: "zap", size: 17, style: { color: "var(--acc-text)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680, flex: 1 } }, "Pack Optimizer"),
+      scan && React.createElement(Badge, { tone: issueCount ? "warn" : "success", dot: true },
+        issueCount ? issueCount + " to fix" : "fully optimized"),
+      React.createElement(Btn, { variant: "ghost", size: "sm", icon: "refresh", disabled: !!busy, onClick: load }, "Rescan")),
+    React.createElement("div", { style: { fontSize: 12, color: "var(--text-dim)", marginBottom: 6, lineHeight: 1.5 } },
+      "Scans this pack for known launch-speed wins and applies them in one click — then prove it with the benchmark."),
+
+    !scan && React.createElement("div", { style: { padding: "14px 0", color: "var(--text-faint)", fontSize: 12.5 } }, "Scanning…"),
+
+    scan && (scan.perfMods || []).length > 0 && row(!needsMods,
+      "Performance mods",
+      needsMods ? "Missing: " + missing.map(m => m.slug).join(", ") + " — curated, loader-matched, installed with required dependencies."
+                : "All curated performance mods for " + (scan.loader || "this loader") + " are installed.",
+      needsMods ? fixBtn("mods", "Install", doMods) : okBadge),
+
+    scan && scan.modernfixInstalled && row(!needsDynRes,
+      "ModernFix dynamic resources",
+      needsDynRes ? "Off — turning it on typically cuts 30–50% of client boot on big packs (reversible)."
+                  : "On — models bake on demand instead of all upfront.",
+      needsDynRes ? fixBtn("dynres", "Enable", doDynRes) : okBadge),
+
+    scan && row(!needsRam,
+      "Memory allocation",
+      needsRam ? (scan.ramMax / 1024).toFixed(1) + " GB set, " + (scan.recommendedRam / 1024).toFixed(1) + " GB recommended for " + scan.modCount + " mods on this machine."
+               : (scan.ramExplicit ? (scan.ramMax / 1024).toFixed(1) + " GB — enough for " + scan.modCount + " mods." : "Auto-sized at launch from mod count + installed RAM."),
+      needsRam ? fixBtn("ram", "Apply", doRam) : okBadge),
+
+    scan && scan.turboSupported && row(!needsTurbo,
+      "VSpeed Turbo",
+      needsTurbo ? "Off — the AOT cache is the single biggest launch win on this pack (measured −32% on ATM10)."
+                 : "Enabled — launches use (or train) the AOT cache.",
+      needsTurbo ? fixBtn("turbo", "Enable", doTurbo) : okBadge),
+
+    scan && row(!needsDef,
+      "Windows Defender exclusion",
+      needsDef ? "Defender re-scans every mod jar on launch — excluding this instance skips that (admin prompt)."
+               : "Excluded — mod jars aren't re-scanned on every launch.",
+      needsDef ? fixBtn("defender", "Exclude", doDefender) : okBadge),
+
+    (busy === "all" || busy === "mods") && prog && React.createElement("div",
+      { style: { display: "flex", alignItems: "center", gap: 8, paddingTop: 10, fontSize: 12, color: "var(--text-dim)" } },
+      React.createElement(Icon, { name: "loader", size: 13, spin: true }), prog),
+
+    scan && issueCount > 0 && React.createElement("div", { style: { paddingTop: 12 } },
+      React.createElement(Btn, { variant: "primary", icon: busy === "all" ? "loader" : "zap", iconSpin: busy === "all",
+        disabled: !!busy, onClick: optimizeAll },
+        busy === "all" ? "Optimizing…" : "Optimize everything (" + issueCount + ")")),
+    scan && issueCount === 0 && ranAll && React.createElement("div",
+      { style: { paddingTop: 10, fontSize: 12, color: "var(--text-dim)" } },
+      "All done — run the Auto-Benchmark below to see the measured difference."));
+}
+
 function SpeedBoostersCard({ instance, api, hasBridge }) {
   const [st, setSt] = tS(null);        // getSpeedTweaks result
   const [busyDef, setBusyDef] = tS(false);
@@ -664,6 +855,136 @@ function BootWaterfall({ instance, api, hasBridge }) {
       "Couldn't identify phase markers in this log. Launch once and try again."));
 }
 
+/* ============ CRASH BISECTOR (find the broken mod) ============ */
+function CrashBisectorCard({ instance, api, hasBridge }) {
+  const [st, setSt] = tS(null);     // { running, leftovers }
+  const [ev, setEv] = tS(null);     // last bisectEvent payload
+  const [busy, setBusy] = tS(false);
+
+  async function load() {
+    if (!hasBridge || !api.getBisect) return;
+    const r = await api.getBisect(instance.id).catch(() => null);
+    if (r && r.ok) setSt(r);
+  }
+  tE(() => { load(); }, [hasBridge, instance.id]);
+
+  tE(() => {
+    function onEv(e) {
+      const d = e.detail || {};
+      setEv(d);
+      if (d.phase === "done")
+        window.toast({ tone: "success", icon: "check", title: "Broken mod found", body: d.culprit || "" });
+      if (d.phase === "done" || d.phase === "error" || d.phase === "cancelled" || d.phase === "noCrash") load();
+    }
+    window.addEventListener("cryo:bisectEvent", onEv);
+    return () => window.removeEventListener("cryo:bisectEvent", onEv);
+  }, [instance.id]);
+
+  async function start() {
+    const ok = window.confirm(
+      "Find the broken mod automatically?\n\n" +
+      "Cryo will boot \"" + (instance.name || instance.id) + "\" up to ~10 times, disabling half the remaining " +
+      "suspects each round, until one mod is isolated. On a big pack this takes 15–40 minutes — leave the PC alone while it runs.\n\n" +
+      "Use this ONLY for crashes that happen during STARTUP (before the main menu). All mods are restored afterwards; " +
+      "the culprit is disabled the standard way (re-enable it in the Mods tab).");
+    if (!ok) return;
+    setBusy(true); setEv(null);
+    const r = await api.startBisect(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    setBusy(false);
+    if (!(r && r.ok)) window.toast({ tone: "warn", icon: "info", title: "Can't start", body: (r && r.error) || "" });
+    load();
+  }
+
+  async function cancel() { await api.cancelBisect().catch(() => null); }
+  async function restore() {
+    const r = await api.restoreBisect(instance.id).catch(() => null);
+    if (r && r.ok) window.toast({ tone: "success", icon: "check", title: "Mods restored", body: (r.restored || 0) + " jar(s) re-enabled" });
+    load();
+  }
+
+  const running = !!(st && st.running);
+  const phase = ev ? ev.phase : "";
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 4 } },
+      React.createElement(Icon, { name: "alert", size: 17, style: { color: "var(--warn)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680, flex: 1 } }, "Crash bisector"),
+      running && React.createElement(Badge, { tone: "accent", dot: true }, "running")),
+    React.createElement("p", { style: { margin: "0 0 10px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
+      "Pack crashes at startup and you don't know which mod? This boots the pack repeatedly, disabling half the suspects " +
+      "each round (dependencies handled), until the one broken mod is isolated. Fully automatic."),
+
+    // Live progress
+    running && ev && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, padding: "8px 0", fontSize: 12.5, color: "var(--text-dim)" } },
+      React.createElement(Icon, { name: "loader", size: 14, spin: true }),
+      React.createElement("span", null,
+        (ev.step ? "Boot " + ev.step + (ev.total ? " of ~" + ev.total : "") + " — " : "") + (ev.message || "working…"))),
+    running && phase === "narrowed" && ev.suspects && React.createElement("div",
+      { style: { fontSize: 11.5, color: "var(--text-faint)", paddingBottom: 6 } },
+      ev.remaining + " suspect(s) left: " + ev.suspects.join(", ") + (ev.remaining > ev.suspects.length ? ", …" : "")),
+
+    // Terminal results
+    !running && phase === "done" && React.createElement("div",
+      { style: { padding: "10px 12px", borderRadius: "var(--r-lg)", background: "var(--success-dim)", border: "1px solid color-mix(in oklab, var(--success) 26%, transparent)", fontSize: 12.5, marginBottom: 10 } },
+      React.createElement("b", null, "Culprit: " + (ev.culprit || "?")),
+      React.createElement("div", { style: { color: "var(--text-dim)", marginTop: 3 } },
+        "Disabled after " + (ev.steps || "?") + " boots — the pack should start now. Re-enable it in the Mods tab to double-check, or look for an update/replacement for that mod.")),
+    !running && (phase === "error" || phase === "noCrash") && React.createElement("div",
+      { style: { padding: "10px 12px", borderRadius: "var(--r-lg)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 } },
+      ev.message || ""),
+
+    React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
+      !running && React.createElement(Btn, { variant: "outline", icon: busy ? "loader" : "play", iconSpin: busy, disabled: busy || !st, onClick: start },
+        "Find the broken mod"),
+      running && React.createElement(Btn, { variant: "outline", icon: "x", onClick: cancel }, "Cancel (restores all mods)"),
+      st && st.leftovers && !running && React.createElement(Btn, { variant: "outline", icon: "refresh", onClick: restore },
+        "Restore mods from an interrupted run")));
+}
+
+/* ============ MOD LOAD PROFILE (slowest mods, estimated from the log) ============ */
+function ModLoadProfileCard({ instance, api, hasBridge }) {
+  const [data, setData]  = tS(null);   // { totalMs, mods:[{name,ms,lines}], analyzedLines }
+  const [loading, setLd] = tS(false);
+  const [err, setErr]    = tS("");
+
+  async function load() {
+    if (!hasBridge || !api.getModLoadProfile) return;
+    setLd(true); setErr("");
+    const r = await api.getModLoadProfile(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    setLd(false);
+    if (r && r.ok) setData(r); else setErr((r && r.error) || "Failed");
+  }
+
+  const top = data ? (data.mods || []) : [];
+  const max = top.length ? Math.max(...top.map(m => m.ms)) : 1;
+  const sys = (n) => n === "Minecraft (vanilla)" || n === "NeoForge / FML" || n === "(console output)" || n === "Mixins (untagged)" || n === "(unknown)";
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 6, flexWrap: "wrap" } },
+      React.createElement(Icon, { name: "gauge", size: 17, style: { color: "var(--acc-2)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Slowest mods"),
+      data && React.createElement("span", { className: "tnum", style: { fontSize: 12, color: "var(--text-faint)" } },
+        "boot " + (data.totalMs / 1000).toFixed(1) + "s · " + data.analyzedLines + " lines"),
+      React.createElement("div", { style: { marginLeft: "auto" } },
+        React.createElement(Btn, { variant: "outline", size: "sm", icon: loading ? "refresh" : "gauge", iconSpin: loading, disabled: loading, onClick: load },
+          loading ? "Analyzing…" : "Analyze last boot"))),
+    React.createElement("p", { style: { margin: "0 0 8px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
+      "Estimated per-mod launch cost from log timestamps (time between lines credited to the mod that logged next). " +
+      "Quiet-but-slow mods are under-counted — treat this as a shortlist, not a verdict."),
+    err && React.createElement("div", { style: { fontSize: 12.5, color: "var(--text-dim)", padding: "8px 0" } }, err),
+    data && top.length > 0 && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 } },
+      top.map((m, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 } },
+        React.createElement("span", { className: "tnum", style: { width: 18, textAlign: "right", color: "var(--text-faint)", flexShrink: 0 } }, (i + 1) + "."),
+        React.createElement("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: sys(m.name) ? "var(--text-faint)" : "var(--text-dim)", fontStyle: sys(m.name) ? "italic" : "normal" } }, m.name),
+        React.createElement("span", { style: { width: 130, height: 5, borderRadius: 3, background: "var(--panel-2)", overflow: "hidden", position: "relative", flexShrink: 0 } },
+          React.createElement("span", { style: { position: "absolute", left: 0, top: 0, bottom: 0, width: (m.ms / max * 100) + "%",
+            background: sys(m.name) ? "var(--text-faint)" : "var(--acc-2)" } })),
+        React.createElement("span", { className: "tnum", style: { width: 52, textAlign: "right", fontWeight: 700, flexShrink: 0 } }, (m.ms / 1000).toFixed(1) + "s")))),
+    data && top.length === 0 && React.createElement("div", { style: { fontSize: 12.5, color: "var(--text-dim)", padding: "8px 0" } },
+      "Nothing above the 0.2s threshold in this log — launch the pack once, then analyze."));
+}
+
 /* ============ PERFORMANCE / VSPEED ============ */
 function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
   const [cache, setCache] = tS(cache0);
@@ -706,6 +1027,9 @@ function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
       ),
     ),
 
+    // Pack Optimizer — one-click scan + fix (perf mods, dynRes, RAM, Turbo, Defender)
+    React.createElement(PackOptimizerCard, { instance, api, hasBridge }),
+
     // VSpeed Turbo (JDK 25 AOT cache) — enable, train, see real boot times
     React.createElement(TurboCard, { instance, api, hasBridge }),
 
@@ -720,6 +1044,12 @@ function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
 
     // boot waterfall (where startup time went)
     React.createElement(BootWaterfall, { instance, api, hasBridge }),
+
+    // slowest mods (per-mod launch cost, estimated from the log)
+    React.createElement(ModLoadProfileCard, { instance, api, hasBridge }),
+
+    // crash bisector (find the broken mod by automated binary search)
+    React.createElement(CrashBisectorCard, { instance, api, hasBridge }),
 
     // status + composition
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)", gap: 18 }, className: "cryo-perf-grid" },

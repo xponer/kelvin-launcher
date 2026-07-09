@@ -176,6 +176,7 @@ public sealed class LauncherCore
         string versionId,
         MSession session,
         int ramMb,
+        int minRamMb     = 0,
         string? gameDir  = null,
         string? javaPath = null,
         IEnumerable<MArgument>? extraJvmArgs = null,
@@ -194,6 +195,7 @@ public sealed class LauncherCore
             Session      = session,
             MaximumRamMb = ramMb > 0 ? ramMb : 4096,
         };
+        if (minRamMb > 0) opt.MinimumRamMb = Math.Min(minRamMb, opt.MaximumRamMb);
         if (!string.IsNullOrWhiteSpace(javaPath)) opt.JavaPath = javaPath;
         // Game dir: the version json ALREADY contains "--gameDir ${game_directory}",
         // so override the variable instead of appending a second --gameDir — Mod-

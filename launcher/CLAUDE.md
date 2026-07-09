@@ -111,6 +111,55 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.0.18 — released (GitHub) — Pack Optimizer · crash bisector · per-mod profiler · smarter JVM · stale-cache opt-in
+- **Pack Optimizer card** (Performance tab, top) — one-click scan + fix: curated perf mods
+  (jar-prefix detection vs `PerfModSlugs`, installs via the existing perf-pack path), ModernFix
+  dynamicResources, RAM vs recommendation, Turbo enablement, Defender exclusion — each row has
+  its own Fix button plus "Optimize everything (N)" which chains them (Defender last, it UACs).
+  New bridge `getOptimizeScan`; fixes compose EXISTING bridge calls. Verified live on ATM10
+  (scan found embeddium+saturn missing, all other rows OK).
+- **Crash bisector** (`Core/CryoBridge.Bisect.cs`, card in Performance tab) — "Find the broken
+  mod": fully automated binary search over mods/. Baseline boot must crash (else "no crash to
+  bisect"); each round renames a dependency-CLOSED half to `.jar.bisect-off` (closure via
+  `ReadModGraphInfo` requires/provides incl. JarJar-nested ids), boots via `EngineLaunchAsync`
+  ("default" mode), detects menu-vs-crash with the log watcher + exit code, keeps the crashing
+  side. Renames are journaled (`cryo-bisect.json`) and ALWAYS restored (finally + leftovers
+  restore button); culprit gets standard `.disabled`. Bridge: `getBisect/startBisect/
+  cancelBisect/restoreBisect`; events `bisectEvent` (scan/boot/narrowed/done/noCrash/error).
+  ⚠️ Interaction-crashes (two mods together) end with an honest "didn't follow either half".
+- **Per-mod launch profiler** ("Slowest mods" card) — parses **debug.log** (the ONLY game log
+  with the source field; latest.log/stdout have thread+level only — first version read the
+  wrong log and produced one bucket). Per-thread timestamp deltas credited to the mod that
+  logged next (30 s gap cap), mixin lines re-attributed via "from mod X", FQCN loggers → 3rd
+  package segment, vanilla/FML grouped. Honest copy: estimate/shortlist, quiet-but-slow mods
+  under-counted; per-bucket sums span threads so they can exceed wall time. Verified live on
+  ATM10: 18 858 lines → Mixins 93.9s, Colorful Hearts, PneumaticCraft, Mekanism… Bridge:
+  `getModLoadProfile`.
+- **Smart JVM defaults (engine path)** — (1) **BUG FIX: instance.cfg `JvmArgs` was NEVER applied
+  on engine launches** (only read by the settings UI) — now parsed (quote-aware) and applied,
+  honouring `OverrideJavaArgs=false`; -Xmx/-Xms tokens stripped (heap comes from RAM settings).
+  (2) When the user has NO custom args, `SmartGcFlags` applies: Aikar core G1 set + string
+  dedup (valid Java 8→25; UnlockExperimentalVMOptions precedes the experimental pair).
+  (3) Heap: explicit `MaxMemAlloc` wins; otherwise auto-sized via `RecommendRamMb` (C# mirror
+  of the UI's recommendRamMb — keep in sync). Xms = Xmx/2 (new `minRamMb` param on
+  `InstallAndLaunchAsync` → `MinimumRamMb`).
+- **Turbo: Compact Object Headers** — `-XX:+UseCompactObjectHeaders` (JEP 519, production in
+  JDK 25) on training AND cache runs. Cache-affecting flags now version the fingerprint:
+  `TurboRuntime.FlagsVersion` ("v2") + the user's JVM args are hashed in, so flag/arg changes
+  retrain instead of the JVM rejecting the cache. ⚠️ All existing caches went stale on purpose.
+- **Turbo: stale cache is opt-in retrain** — mods changed → launch runs STANDARD (no surprise
+  ~50%-slower training run), `turboEvent phase:"stale"` toast, TurboCard shows "cache outdated"
+  + "Retrain on next launch" (`retrainTurbo` bridge → `RetrainRequested`, cleared on success).
+  First-ever training still automatic; benchmark sets RetrainRequested itself (running it IS
+  consent). Fixed in passing: `GetTurbo`/benchmark fingerprints now include the args key
+  (else custom-args packs showed "trains on next launch" forever / benchmark waited 22 min);
+  stale caches can be Reset; stat shows "N MB (outdated)". Verified live: after the v2 bump
+  ATM10 showed the stale badge + retrain box exactly as designed.
+- All C# builds 0/0, JS `node --check` clean, UI verified via computer-use (Performance tab
+  cards render, optimizer scan + profiler ran against real data). ⚠️ Not yet exercised: a full
+  bisect run (needs a genuinely crashing pack), Turbo retrain with COH (user should retrain +
+  benchmark — expect the −32% to hold or improve), smart-GC-flag boot on a Java 8 pack.
+
 ### v1.0.17 — released (GitHub) — Speed boosters + Turbo verified (−32% on ATM10) + bug-fix pass
 - **Turbo verified working on ATM10**: after a fresh retrain, two consecutive Turbo launches
   booted from the 638 MB cache in **75 s / 77 s** vs 104–116 s default (**≈ −32%**), benchmark
