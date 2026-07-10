@@ -189,9 +189,30 @@ public sealed partial class CryoBridge
         });
     }
 
+    /// <summary>True while the WebView renderer is suspended (window hidden or
+    /// minimized). Push() queues instead of posting — a post would wake the
+    /// renderer and defeat the memory release.</summary>
+    public static volatile bool WebSuspended;
+    private readonly Queue<string> _pendingPush = new();
+    private const int PendingPushCap = 400;
+
     private void Push(string type, object data)
     {
         var json = JsonSerializer.Serialize(new { type, data }, _jOpts);
+        if (WebSuspended)
+        {
+            lock (_pendingPush)
+            {
+                _pendingPush.Enqueue(json);
+                while (_pendingPush.Count > PendingPushCap) _pendingPush.Dequeue();
+            }
+            return;
+        }
+        PostToWeb(json);
+    }
+
+    private void PostToWeb(string json)
+    {
         try
         {
             WpfApp.Current?.Dispatcher.Invoke(() =>
@@ -201,6 +222,21 @@ public sealed partial class CryoBridge
         {
             Logger.Warn($"Bridge push failed: {e.Message}");
         }
+    }
+
+    /// <summary>Delivers everything that was pushed while the WebView slept —
+    /// the UI catches up (state reloads, late toasts) the moment it's visible.</summary>
+    public void FlushPendingPushes()
+    {
+        List<string> drain;
+        lock (_pendingPush)
+        {
+            if (_pendingPush.Count == 0) return;
+            drain = new List<string>(_pendingPush);
+            _pendingPush.Clear();
+        }
+        foreach (var json in drain) PostToWeb(json);
+        Logger.Info($"Bridge: flushed {drain.Count} event(s) queued while the UI slept");
     }
 
     // ── Receive: JS → C# ─────────────────────────────────────────────────────
@@ -291,7 +327,7 @@ public sealed partial class CryoBridge
             "getBootTimeline" => GetBootTimeline(args.Str("id")),
             "getModLoadProfile" => GetModLoadProfile(args.Str("id")),
             "rebuildCache"    => RebuildCache(args.Str("id")),
-            "launchInstance"  => LaunchInstance(args.Str("id"), args.Bool("vanilla", false), args.Str("joinServer")),
+            "launchInstance"  => LaunchInstance(args.Str("id"), args.Bool("vanilla", false), args.Str("joinServer"), args.Bool("resume", false)),
             "startBenchmark"  => StartBenchmark(args.Str("id")),
             "cancelBenchmark" => CancelBenchmark(),
             "getTurbo"        => GetTurbo(args.Str("id")),
@@ -305,6 +341,10 @@ public sealed partial class CryoBridge
             "startBisect"         => StartBisect(args.Str("id")),
             "cancelBisect"        => CancelBisect(),
             "restoreBisect"       => RestoreBisect(args.Str("id")),
+            "getTunnel"           => GetTunnel(args.Str("id")),
+            "startTunnel"         => StartTunnel(args.Str("id")),
+            "stopTunnel"          => StopTunnel(),
+            "resetTunnel"         => ResetTunnel(),
             "setDynamicResources" => SetDynamicResources(args.Str("id"), args.Bool("on", false)),
             "selfCheck"       => SelfCheck(),
             "getAppVersion"   => GetAppVersion(),
@@ -367,6 +407,10 @@ public sealed partial class CryoBridge
             "addLocalMods"        => AddLocalMods(args.Str("id")),
             "addLocalModData"     => AddLocalModData(args.Str("id"), args.Str("filename"), args.Str("base64")),
             "checkModUpdates"     => CheckModUpdates(args.Str("id")),
+            "startSafeUpdate"     => StartSafeUpdate(args.Str("id")),
+            "cancelSafeUpdate"    => CancelSafeUpdate(),
+            "getSafeUpdate"       => GetSafeUpdate(args.Str("id")),
+            "rollbackUpdate"      => RollbackUpdate(args.Str("id")),
             "updateMod"           => UpdateMod(args.Str("id"), args.Str("oldFile"), args.Str("url"), args.Str("newFilename"), args.Str("sha512")),
             // ── Server list ────────────────────────────────────────────────────────
             "getServers"          => GetServers(args.Str("id")),
@@ -1522,10 +1566,47 @@ public sealed partial class CryoBridge
         return new { ok = true };
     }
 
-    private object LaunchInstance(string id, bool vanilla, string joinServer = "")
+    /// <summary>Newest singleplayer world folder (by level.dat mtime), or null.</summary>
+    private string? NewestWorld(string id)
+    {
+        try
+        {
+            var savesDir = Path.Combine(InstanceDataDir(id), "instances", id, "minecraft", "saves");
+            if (!Directory.Exists(savesDir)) return null;
+            return Directory.EnumerateDirectories(savesDir)
+                .Select(d => new { Name = Path.GetFileName(d)!, Level = new FileInfo(Path.Combine(d, "level.dat")) })
+                .Where(w => w.Level.Exists)
+                .OrderByDescending(w => w.Level.LastWriteTimeUtc)
+                .Select(w => w.Name)
+                .FirstOrDefault();
+        }
+        catch { return null; }
+    }
+
+    private static int McMinor(string mc)
+    {
+        var parts = (mc ?? "").Split('.');
+        return parts.Length >= 2 && int.TryParse(parts[1], out var minor) ? minor : 0;
+    }
+
+    private object LaunchInstance(string id, bool vanilla, string joinServer = "", bool resume = false)
     {
         var inst = _manager.FindById(id)
             ?? throw new InvalidOperationException($"Instance not found: {id}");
+
+        // "Resume": boot straight into the newest singleplayer world via Quick Play
+        // (--quickPlaySingleplayer, MC 1.20+). Resolved at click time so it always
+        // targets whatever the user played last.
+        string resumeWorld = "";
+        if (resume)
+        {
+            var meta0 = InstanceMetaReader.Read(id, InstanceDataDir(id));
+            if (McMinor(meta0.Mc) < 20)
+                return new { ok = false, error = "Resume needs Minecraft 1.20+ (Quick Play doesn't exist before that)." };
+            resumeWorld = NewestWorld(id) ?? "";
+            if (resumeWorld.Length == 0)
+                return new { ok = false, error = "No singleplayer worlds in this pack yet — play once first." };
+        }
 
         if (_config.Data.AutoBackupBeforeLaunch) AutoBackupWorlds(id);
 
@@ -1534,9 +1615,15 @@ public sealed partial class CryoBridge
             && GetStoredEngineVersion(id) != null)
         {
             Logger.Info($"LaunchInstance({id}): routing to Cryo engine (source=cryo)"
-                        + (string.IsNullOrWhiteSpace(joinServer) ? "" : $", joining {joinServer}"));
-            return LaunchWithEngine(id, joinServer);
+                        + (string.IsNullOrWhiteSpace(joinServer) ? "" : $", joining {joinServer}")
+                        + (resumeWorld.Length == 0 ? "" : $", resuming '{resumeWorld}'"));
+            return LaunchWithEngine(id, joinServer, resumeWorld);
         }
+
+        // The Prism path can't carry extra game args — be honest instead of silently
+        // launching to the menu.
+        if (resume)
+            return new { ok = false, error = "Resume launches through the Cryo engine — enable \"Engine is the default launcher\" in Performance → Cryo Engine first." };
 
         if (_config.Data.AutoHideOnLaunch)
             WpfApp.Current?.Dispatcher.Invoke(() => WpfApp.Current?.MainWindow?.Hide());
@@ -5016,9 +5103,9 @@ Example for an unknown error:
     /// The instance's own .minecraft folder (mods, config, saves) is passed as gameDir.
     /// Push events: engineProgress / engineError.
     /// </summary>
-    private object LaunchWithEngine(string instanceId, string joinServer = "")
+    private object LaunchWithEngine(string instanceId, string joinServer = "", string resumeWorld = "")
     {
-        _ = Task.Run(() => EngineLaunchAsync(instanceId, joinServer, mode: "auto", bootTcs: null));
+        _ = Task.Run(() => EngineLaunchAsync(instanceId, joinServer, mode: "auto", bootTcs: null, resumeWorld: resumeWorld));
         return new { ok = true };
     }
 
@@ -5030,7 +5117,7 @@ Example for an unknown error:
     /// boot-to-menu seconds (-1 if unmeasurable); interactive launches pass null.
     /// Returns the game process, or null if the launch failed.
     /// </summary>
-    private async Task<Process?> EngineLaunchAsync(string instanceId, string joinServer, string mode, TaskCompletionSource<long>? bootTcs)
+    private async Task<Process?> EngineLaunchAsync(string instanceId, string joinServer, string mode, TaskCompletionSource<long>? bootTcs, string resumeWorld = "")
     {
             try
             {
@@ -5242,6 +5329,16 @@ Example for an unknown error:
                 // "Join server": pass quickPlay/server args so the game connects on launch.
                 var extraGame = BuildJoinGameArgs(meta.Mc, joinServer);
                 if (extraGame.Count > 0) Push("engineProgress", new { phase = "join", message = $"Will join {joinServer} on launch…" });
+
+                // "Resume": Quick Play straight into a singleplayer world (MC 1.20+,
+                // gated by the caller). World folder names can contain spaces →
+                // single-string MArgument so CmlLib quotes it.
+                if (!string.IsNullOrWhiteSpace(resumeWorld))
+                {
+                    extraGame.Add(CmlLib.Core.ProcessBuilder.MArgument.FromCommandLine("--quickPlaySingleplayer"));
+                    extraGame.Add(new CmlLib.Core.ProcessBuilder.MArgument(resumeWorld));
+                    Push("engineProgress", new { phase = "join", message = $"Resuming \"{resumeWorld}\" on launch…" });
+                }
 
                 // Heap: an explicit MaxMemAlloc in instance.cfg wins; otherwise
                 // auto-size from the pack's mod count + installed RAM (mirrors

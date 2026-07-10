@@ -172,8 +172,11 @@ public sealed partial class CryoBridge
                     {
                         var exit = proc.WaitForExitAsync(ct);
                         var winner = await Task.WhenAny(bootTcs.Task, exit, Task.Delay(TimeSpan.FromMinutes(15), ct));
-                        if (winner == bootTcs.Task)      crashed = false;                    // reached the menu
-                        else if (winner == exit)         crashed = proc.ExitCode != 0;       // died before the menu
+                        // A measured boot (>0) is the only "runs fine". -2 = the boot
+                        // watcher saw a fatal / mod-loading-error screen; -1 or an
+                        // exit before the menu = the game died — both count as crashed.
+                        if (winner == bootTcs.Task)      crashed = bootTcs.Task.Result <= 0;
+                        else if (winner == exit)         crashed = true;
                         // else: 15-min timeout without menu or exit → inconclusive
                         await Task.Delay(1500, ct);
                         try { _manager.Kill(inst); } catch { /* already gone */ }

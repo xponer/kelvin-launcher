@@ -323,6 +323,19 @@ public static class TurboRuntime
                             if (line.Length == 0) continue;
                             lastLineAt = DateTime.UtcNow;
 
+                            // Fatal markers FIRST: NeoForge's mod-loading-error screen
+                            // starts the sound engine and then goes quiet — exactly like
+                            // the main menu — so without this the quiet fallback below
+                            // declared a CRASHED pack "booted in 22s" (seen live on a
+                            // broken ATM10 update). -2 = reached an error state, not a boot.
+                            if (line.Contains("Error during pre-loading phase", StringComparison.Ordinal)
+                             || line.Contains("Mod loading has failed", StringComparison.OrdinalIgnoreCase)
+                             || line.Contains("Crash report saved", StringComparison.OrdinalIgnoreCase)
+                             || line.Contains("A fatal error has been detected", StringComparison.Ordinal)
+                             || line.Contains("InvalidModFileException", StringComparison.Ordinal)
+                             || line.Contains("---- Minecraft Crash Report", StringComparison.Ordinal))
+                                return -2;
+
                             var m = _reModernFix.Match(line);
                             if (m.Success && double.TryParse(m.Groups[1].Value.Replace(',', '.'),
                                     NumberStyles.Float, CultureInfo.InvariantCulture, out var s) && s > 0)

@@ -120,7 +120,8 @@ function InstanceDetail({ id, initialTab, autoLaunch }) {
   }, [hasBridge, id, data, status]);
 
   // в”Ђв”Ђ Launch в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
-  const startLaunch = dC(async () => {
+  const startLaunch = dC(async (opts) => {
+    const resume = !!(opts && opts.resume);
     if (!data || status !== "idle") return;
     setTab("overview");
     setModelT(0);
@@ -139,11 +140,14 @@ function InstanceDetail({ id, initialTab, autoLaunch }) {
       sim.start();
 
       try {
-        await api.launchInstance(data.instance.id);
+        const r = await (resume ? api.resumeInstance(data.instance.id)
+                                : api.launchInstance(data.instance.id));
+        // The bridge reports refusals as { ok:false, error } rather than throwing.
+        if (r && r.ok === false) throw new Error(r.error || "Launch refused");
       } catch (err) {
         sim.stop(); simRef.current = null;
         setStatus("idle"); setModelT(0);
-        window.toast({ tone: "error", icon: "alert", title: "Launch failed", body: err.message });
+        window.toast({ tone: "error", icon: "alert", title: resume ? "Can't resume" : "Launch failed", body: err.message });
       }
     } else {
       // Simulation (browser testing)
@@ -213,8 +217,14 @@ function InstanceDetail({ id, initialTab, autoLaunch }) {
     { value: "settings",     label: t("tab.settings"),     icon: "sliders" },
   ];
 
+  const mcMinorParts = String(instance.mc || "").split(".");
+  const mcMinor = mcMinorParts.length > 1 ? (parseInt(mcMinorParts[1], 10) || 0) : 0;
+
   const playBtn = status === "idle"
-    ? React.createElement(Btn, { variant: "primary", size: "lg", icon: "play", onClick: startLaunch }, t("common.play"))
+    ? React.createElement("div", { style: { display: "flex", gap: 8 } },
+        hasBridge && mcMinor >= 20 && React.createElement(Tip, { label: "Boot straight into your last singleplayer world — skips every menu (Quick Play, MC 1.20+)" },
+          React.createElement(Btn, { variant: "outline", size: "lg", icon: "refresh", onClick: () => startLaunch({ resume: true }) }, "Resume")),
+        React.createElement(Btn, { variant: "primary", size: "lg", icon: "play", onClick: () => startLaunch() }, t("common.play")))
     : status === "launching"
       ? React.createElement("div", { style: { display: "flex", gap: 8 } },
           React.createElement(Btn, { variant: "accentSoft", size: "lg", icon: "loader", iconSpin: true, disabled: true },

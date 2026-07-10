@@ -1439,6 +1439,55 @@ function ModsTab({ instance, mods: mods0, t, fmt, api, hasBridge, onModsChanged 
     if (r && r.ok === false) { setCheck(false); window.toast({ tone: "danger", icon: "alert", title: "Couldn't start", body: r.error || "" }); }
   }
 
+  // ── Safe update (snapshot → update all → boot-verify → auto-rollback) ──
+  const [safeSt, setSafeSt] = tS(null);   // { running, hasSnapshot, snapshotAt }
+  const [safeEv, setSafeEv] = tS(null);   // last safeUpdateEvent payload
+  async function loadSafe() {
+    if (!hasBridge || !api.getSafeUpdate) return;
+    const r = await api.getSafeUpdate(instance.id).catch(() => null);
+    if (r && r.ok) setSafeSt(r);
+  }
+  tE(() => { loadSafe(); }, [hasBridge, instance.id]);
+  tE(() => {
+    function onSafe(e) {
+      const d = e.detail || {};
+      setSafeEv(d);
+      if (d.phase === "done") {
+        window.toast({ tone: "success", icon: "check", title: "Updated & verified", body: d.message || "" });
+        setUpdates(null);   // list is stale now — re-check shows the new state
+      } else if (d.phase === "rolledBack")
+        window.toast({ tone: "warn", icon: "shield", title: "Update rolled back", body: d.message || "" });
+      else if (d.phase === "upToDate")
+        window.toast({ tone: "success", icon: "check", title: "All mods up to date", body: d.message || "" });
+      else if (d.phase === "error")
+        window.toast({ tone: "danger", icon: "alert", title: "Safe update failed", body: d.message || "" });
+      if (["done", "rolledBack", "upToDate", "error", "cancelled", "inconclusive"].includes(d.phase)) loadSafe();
+    }
+    window.addEventListener("cryo:safeUpdateEvent", onSafe);
+    return () => window.removeEventListener("cryo:safeUpdateEvent", onSafe);
+  }, [instance.id]);
+
+  async function startSafeUpdate() {
+    if (!hasBridge) { window.toast({ tone: "warn", icon: "info", title: "Desktop only" }); return; }
+    const ok = window.confirm(
+      "Safe update \"" + (instance.name || instance.id) + "\"?\n\n" +
+      "Cryo will: snapshot your current mods → install every available update → launch the pack ONCE to verify it still " +
+      "boots → and roll everything back automatically if it crashes. Takes a few minutes (one full game boot).\n\n" +
+      "The snapshot is kept afterwards, so you can also roll back manually any time until the next update.");
+    if (!ok) return;
+    setSafeEv(null);
+    const r = await api.startSafeUpdate(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok === false) window.toast({ tone: "warn", icon: "info", title: "Can't start", body: r.error || "" });
+    loadSafe();
+  }
+  async function rollbackUpdate() {
+    if (!window.confirm("Roll back the last mod update?\n\nAll updated jars are removed and the previous versions restored.")) return;
+    const r = await api.rollbackUpdate(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok) { window.toast({ tone: "success", icon: "check", title: "Rolled back", body: (r.restored || 0) + " mod(s) restored" }); setUpdates(null); }
+    else window.toast({ tone: "warn", icon: "info", title: "Couldn't roll back", body: (r && r.error) || "" });
+    loadSafe();
+  }
+
   // ── Dependency graph analysis ──
   const [graph, setGraph]     = tS(null);   // { nodeCount, edgeCount, issueCount, issues, nodes, edges }
   const [analyzing, setAnalyz] = tS(false);
@@ -1479,9 +1528,24 @@ function ModsTab({ instance, mods: mods0, t, fmt, api, hasBridge, onModsChanged 
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" } },
       React.createElement(Icon, { name: "download", size: 17, style: { color: "var(--acc-2)" } }),
       React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Mod updates"),
-      React.createElement("div", { style: { marginLeft: "auto", display: "flex", gap: 8 } },
-        (updates && updates.length > 0) && React.createElement(Btn, { variant: "primary", size: "sm", icon: "download", onClick: updateAll, disabled: Object.keys(updating).length > 0 }, "Update all (" + updates.length + ")"),
-        React.createElement(Btn, { variant: "outline", size: "sm", icon: checkingUpd ? "refresh" : "refresh", iconSpin: checkingUpd, disabled: checkingUpd, onClick: checkUpdates }, checkingUpd ? "Checking…" : "Check for updates"))),
+      safeSt && safeSt.running && React.createElement(Badge, { tone: "accent", dot: true }, "safe update running"),
+      React.createElement("div", { style: { marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" } },
+        safeSt && safeSt.running
+          ? React.createElement(Btn, { variant: "outline", size: "sm", icon: "x", onClick: () => api.cancelSafeUpdate().catch(() => {}) }, "Cancel (restores mods)")
+          : React.createElement(Tip, { label: "Snapshot → update everything → boot-verify the pack → auto-rollback if it crashes" },
+              React.createElement(Btn, { variant: "primary", size: "sm", icon: "shield", disabled: Object.keys(updating).length > 0, onClick: startSafeUpdate }, "Safe update all")),
+        (updates && updates.length > 0) && !(safeSt && safeSt.running) && React.createElement(Btn, { variant: "outline", size: "sm", icon: "download", onClick: updateAll, disabled: Object.keys(updating).length > 0 }, "Update all, no verify (" + updates.length + ")"),
+        safeSt && safeSt.hasSnapshot && !safeSt.running && React.createElement(Tip, { label: "Restore every mod to its pre-update version (snapshot from the last safe update)" },
+          React.createElement(Btn, { variant: "outline", size: "sm", icon: "refresh", onClick: rollbackUpdate }, "Roll back")),
+        !(safeSt && safeSt.running) && React.createElement(Btn, { variant: "outline", size: "sm", icon: "refresh", iconSpin: checkingUpd, disabled: checkingUpd, onClick: checkUpdates }, checkingUpd ? "Checking…" : "Check for updates"))),
+    safeSt && safeSt.running && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12, color: "var(--text-dim)" } },
+      React.createElement(Icon, { name: "loader", size: 13, spin: true }),
+      React.createElement("span", null,
+        (safeEv && safeEv.message) || "Safe update running…",
+        safeEv && safeEv.phase === "downloading" && safeEv.total ? "" : "")),
+    !((safeSt && safeSt.running)) && safeEv && (safeEv.phase === "rolledBack" || safeEv.phase === "inconclusive") && React.createElement("div",
+      { style: { marginTop: 10, padding: "10px 12px", borderRadius: "var(--r-md)", background: "var(--warn-dim)", border: "1px solid color-mix(in oklab, var(--warn) 28%, transparent)", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 } },
+      safeEv.message || ""),
     checkingUpd && React.createElement("div", { style: { marginTop: 10, fontSize: 12, color: "var(--text-dim)" } }, updProg || "Working…"),
     updates && updates.length > 0 && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 12 } },
       updates.map(u => React.createElement("div", { key: u.currentFile, style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)" } },
@@ -2561,6 +2625,96 @@ function ServerSettings({ id, api, running }) {
             onChange: x => setExtra(list => list.map(it => it.k === e.k ? { ...it, v: x } : it)) }))))));
 }
 
+/* ============ PUBLIC ACCESS (playit.gg tunnel — friends join from anywhere) ============ */
+function PublicAccessCard({ id, api }) {
+  const [tn, setTn] = tS(null);     // getTunnel result
+  const [msg, setMsg] = tS("");     // live phase message
+
+  async function load() {
+    if (!api.getTunnel) return;
+    const r = await api.getTunnel(id).catch(() => null);
+    if (r && r.ok) setTn(r);
+  }
+  tE(() => { load(); }, [id]);
+  tE(() => {
+    function onEv(e) {
+      const d = e.detail || {};
+      setMsg(d.message || "");
+      if (d.phase === "online")
+        window.toast({ tone: "success", icon: "globe", title: "Server is public", body: d.address || "" });
+      else if (d.phase === "error")
+        window.toast({ tone: "danger", icon: "alert", title: "Tunnel failed", body: d.message || "" });
+      load();
+    }
+    window.addEventListener("cryo:tunnelEvent", onEv);
+    return () => window.removeEventListener("cryo:tunnelEvent", onEv);
+  }, [id]);
+
+  async function makePublic() {
+    setMsg("");
+    const r = await api.startTunnel(id).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok === false) window.toast({ tone: "warn", icon: "info", title: "Can't start tunnel", body: r.error || "" });
+    load();
+  }
+  async function stopSharing() { await api.stopTunnel().catch(() => {}); load(); }
+  function copyAddr() {
+    if (tn && tn.address) navigator.clipboard.writeText(tn.address)
+      .then(() => window.toast({ tone: "success", icon: "check", title: "Address copied", body: tn.address }));
+  }
+
+  const st = tn ? tn.status : "off";
+  const workingLabel = { installing: "Installing the tunnel agent…", preparing: "Setting up the public address…" }[st];
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" } },
+      React.createElement(Icon, { name: "globe", size: 17, style: { color: "var(--acc-2)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680, flex: 1 } }, "Public access — play with friends"),
+      st === "online" && React.createElement(Badge, { tone: "success", dot: true }, "public"),
+      (st === "installing" || st === "preparing" || st === "claim") && React.createElement(Badge, { tone: "warn", dot: true }, "starting…")),
+    React.createElement("p", { style: { margin: "8px 0 10px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
+      "Give friends a public address that reaches this server from anywhere — no router setup, no port forwarding. " +
+      "Powered by the free playit.gg tunnel (one-time account link on first use)."),
+
+    // one tunnel at a time — in use by another instance
+    tn && tn.busyWith && React.createElement("div", { style: { fontSize: 12.5, color: "var(--text-dim)", padding: "6px 0" } },
+      "The tunnel is currently sharing \"" + tn.busyWith + "\" — stop it there first (one public address at a time)."),
+
+    // claim: one-time playit.gg approval
+    st === "claim" && tn.claimUrl && React.createElement("div",
+      { style: { padding: "12px 14px", borderRadius: "var(--r-md)", background: "var(--warn-dim)", border: "1px solid color-mix(in oklab, var(--warn) 28%, transparent)", marginBottom: 10 } },
+      React.createElement("div", { style: { fontSize: 12.5, color: "var(--text)", lineHeight: 1.5, marginBottom: 9 } },
+        "One-time setup: approve this launcher on playit.gg (free — you can continue as guest). Waiting for your approval…"),
+      React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+        React.createElement(Btn, { variant: "primary", size: "sm", icon: "globe", onClick: () => api.openUrl(tn.claimUrl) }, "Open approval page"),
+        React.createElement(Icon, { name: "loader", size: 14, spin: true }))),
+
+    // working
+    workingLabel && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 0", fontSize: 12.5, color: "var(--text-dim)" } },
+      React.createElement(Icon, { name: "loader", size: 14, spin: true }), msg || workingLabel),
+
+    // online: the address to share
+    st === "online" && tn.address && React.createElement("div",
+      { style: { padding: "12px 14px", borderRadius: "var(--r-md)", background: "var(--success-dim)", border: "1px solid color-mix(in oklab, var(--success) 26%, transparent)", marginBottom: 10 } },
+      React.createElement("div", { style: { fontSize: 11.5, fontWeight: 600, color: "var(--text-faint)", marginBottom: 5 } }, "GIVE THIS ADDRESS TO YOUR FRIENDS"),
+      React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
+        React.createElement("span", { className: "mono", style: { fontSize: 15, fontWeight: 700, color: "var(--text)", wordBreak: "break-all" } }, tn.address),
+        React.createElement(Btn, { variant: "outline", size: "sm", icon: "copy", onClick: copyAddr }, "Copy")),
+      React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 7 } },
+        "They add it in Multiplayer → Add Server. Works from any network. Friends need the same mods (share the pack via Export).")),
+
+    // error
+    st === "error" && tn.error && React.createElement("div",
+      { style: { padding: "10px 12px", borderRadius: "var(--r-md)", background: "var(--error-dim)", border: "1px solid color-mix(in oklab, var(--error) 30%, transparent)", fontSize: 12.5, color: "var(--text-dim)", marginBottom: 10 } },
+      tn.error),
+
+    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+      st === "online"
+        ? React.createElement(Btn, { variant: "outline", size: "sm", icon: "power", onClick: stopSharing }, "Stop sharing")
+        : (st === "off" || st === "error") && React.createElement(Btn, { variant: "primary", size: "sm", icon: "globe",
+            disabled: !!(tn && tn.busyWith), onClick: makePublic }, "Make public"),
+      st === "claim" && React.createElement(Btn, { variant: "ghost", size: "sm", icon: "x", onClick: stopSharing }, "Cancel")));
+}
+
 function HostServerTab({ instance, api, hasBridge }) {
   const id = instance.id;
   const [srv, setSrv]   = tS(null);
@@ -2694,6 +2848,8 @@ function HostServerTab({ instance, api, hasBridge }) {
 
   return React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 14 } },
     controls,
+    // public address via playit.gg — friends join without port forwarding
+    React.createElement(PublicAccessCard, { id, api }),
     React.createElement(Segmented, { value: view, onChange: setView, size: "sm",
       options: [{ value: "console", label: "Console", icon: "terminal" }, { value: "settings", label: "Settings", icon: "sliders" }] }),
     view === "settings" ? React.createElement(ServerSettings, { id, api, running }) : consoleCard);

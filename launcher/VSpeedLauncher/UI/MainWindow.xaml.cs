@@ -23,6 +23,47 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) =>
             HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WndProc);
         Loaded += async (_, _) => await InitWebViewAsync();
+        // Launcher sleeps while you play: minimized or hidden-to-tray → suspend
+        // the WebView2 renderer and release its memory back to the game.
+        StateChanged     += (_, _) => UpdateSuspendState();
+        IsVisibleChanged += (_, _) => UpdateSuspendState();
+    }
+
+    // ── Sleep while hidden/minimized ─────────────────────────────────────────
+    // The WebView2 UI holds 300–500 MB while idle. When the window is minimized
+    // or hidden to the tray (typically: while the game runs), suspend the
+    // renderer (memory released to the OS) and queue bridge events; on restore,
+    // resume and flush so the UI catches up instantly.
+    private bool _webSuspended;
+
+    private async void UpdateSuspendState()
+    {
+        if (WebView?.CoreWebView2 == null) return;
+        bool shouldSleep = !IsVisible || WindowState == WindowState.Minimized;
+        if (shouldSleep == _webSuspended) return;
+        try
+        {
+            if (shouldSleep)
+            {
+                _webSuspended = true;
+                CryoBridge.WebSuspended = true;               // queue pushes from now on
+                WebView.Visibility = Visibility.Collapsed;    // suspend requires IsVisible=false
+                WebView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+                await Task.Delay(150);                        // let visibility propagate
+                if (_webSuspended) await WebView.CoreWebView2.TrySuspendAsync();
+                Logger.Info("WebView suspended — launcher UI memory released while hidden");
+            }
+            else
+            {
+                _webSuspended = false;
+                WebView.CoreWebView2.Resume();
+                WebView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+                WebView.Visibility = Visibility.Visible;
+                CryoBridge.WebSuspended = false;
+                _bridge?.FlushPendingPushes();
+            }
+        }
+        catch (Exception ex) { Logger.Warn($"WebView suspend/resume: {ex.Message}"); }
     }
 
     private async Task InitWebViewAsync()

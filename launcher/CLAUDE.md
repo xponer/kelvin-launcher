@@ -111,6 +111,72 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.0.19 — released (GitHub) — Safe updates with auto-rollback + public server tunnel + Resume + launcher sleeps
+- **Public access for hosted servers** (`Core/CryoBridge.Tunnel.cs`, card in the Host server
+  tab) — "Make public" gives friends a playit.gg address that reaches the Cryo-hosted server
+  from anywhere, zero port forwarding. The open-source playit agent (pinned v0.15.26 x86_64,
+  ~4 MB, GitHub releases) auto-provisions into `%LocalAppData%\VSpeedLauncher\playit\` like
+  the Turbo runtime. One-time link: `claim generate` → user approves
+  `https://playit.gg/claim/<code>` in the browser (free/guest) → `claim exchange --wait`
+  returns the agent secret → stored **DPAPI-encrypted** (hard rule #2: credential never
+  logged/echoed; the CLI/agent get it via a short-lived `--secret_path` file, never argv).
+  Per session: tunnel ensure/lookup goes through the **playit REST API directly**
+  (`api.playit.gg`, `Authorization: agent-key`; `/agents/rundata` → `/tunnels/list` →
+  `/tunnels/create`) — the pinned CLI's `tunnels prepare` is broken against the current API
+  (typed tunnels now require a `description` field → `TunnelTypeRequiresDescription`, found
+  live; request shapes taken from the agent's own api_client source at v0.15.26 + the new
+  field, validated against the live API). Poll list until `alloc.status=="allocated"`;
+  address = `assigned_domain` (SRV — friends paste JUST the domain, no port). Agent runs
+  `run <tunnel-id>=<server-port>` (explicit mapping so custom ports work). One tunnel at a
+  time (UI says which instance holds it). Bridge: `getTunnel/startTunnel/stopTunnel/
+  resetTunnel`; events `tunnelEvent` (installing/claim{url}/claimed/preparing/
+  online{address}/stopped/error). CLI output is ANSI-stripped (ESC-wrapped, verified).
+  **VERIFIED LIVE END-TO-END on ATM10**: agent auto-download → claim approved (user) →
+  tunnel created via API → card shows "public" + `volatile-evolution.gl.joinmc.link` with
+  Copy/Stop sharing; agent process mapped to :25565. NOTE: playit was NOT installed on this
+  machine (stale shortcut only) — that's why provisioning is built in.
+- **First real e2e run of v1.0.14 server hosting**: "Set up server" on ATM10 completed —
+  479 mods + config copied, NeoForge 21.1.228 `--installServer` succeeded, `setupDone:true`
+  (launchKind neoargs / win_args.txt). The setup path works on a big modded pack.
+- **Safe update all** (`Core/CryoBridge.SafeUpdate.cs`, Mods tab) — the worry-free "Update all":
+  snapshot the current jars into `<instance>/mods.rollback/` (+ manifest.json [{Old,New}]),
+  apply every Modrinth update, **boot-verify** via `EngineLaunchAsync` + the boot watcher, and
+  **auto-rollback on crash**. Failed downloads restore that one mod inline and continue. On
+  success the snapshot is KEPT → manual "Roll back" button until the next run. Cancel/error
+  paths restore everything. Bridge: `startSafeUpdate/cancelSafeUpdate/getSafeUpdate/
+  rollbackUpdate`; events `safeUpdateEvent` (checking/snapshot/downloading n/total/verifying/
+  done/rolledBack/upToDate/inconclusive/cancelled/error). The old blind path stays as
+  "Update all, no verify".
+  **PROVEN LIVE on ATM10**: 100 updates applied → the pack genuinely broke (several mods now
+  require NeoForge ≥21.1.230; Structory jar wasn't even a NeoForge file) → crash detected →
+  all 100 rolled back automatically; disk verified byte-identical file set (479 jars, mtimes
+  preserved by File.Move so the Turbo fingerprint stays valid).
+- **CRITICAL FIX (found by that live run): the boot watcher called a CRASHED pack "booted".**
+  NeoForge's mod-loading-error screen starts the sound engine then goes quiet — exactly the
+  quiet-fallback signature of the main menu — so `WatchBootAsync` measured a bogus "22s boot"
+  on a crashed launch (also poisoning boot records + the benchmark). Fix: fatal markers
+  ("Error during pre-loading phase", "Mod loading has failed", "Crash report saved", "A fatal
+  error has been detected", "InvalidModFileException", crash-report header) now return **-2**
+  immediately. All bootTcs consumers tightened: only a measured boot (>0) counts as success;
+  -1/-2/exit-before-menu = crashed (safe update rolls back, the BISECTOR now also judges
+  error-screen rounds correctly — it had the same latent bug).
+- **Resume** (instance header, next to Play) — boots straight into the newest singleplayer
+  world via Quick Play (`--quickPlaySingleplayer <world>`, MC 1.20+ only; world resolved at
+  click time by `NewestWorld` = newest `saves/*/level.dat`). Engine path only — the Prism path
+  can't carry extra game args, so `resume` on a non-engine instance returns an honest error
+  ("enable Engine is the default launcher first") instead of silently launching to the menu.
+  World names can contain spaces → single-string `MArgument`. Bridge: `launchInstance` gains
+  `resume:true` (store `resumeInstance`); UI `startLaunch({resume})` + `{ok:false}` bridge
+  refusals now surface as toasts (they previously looked like a successful launch). Verified
+  live on ATM10: resolved "New World", quickplay arg accepted, world reached.
+- **Launcher sleeps while hidden** — minimized or closed-to-tray → `MainWindow.
+  UpdateSuspendState` collapses the WebView (suspend requires IsVisible=false, 150 ms
+  propagation delay), sets `MemoryUsageTargetLevel=Low`, `TrySuspendAsync`; restore reverses
+  and flushes. `CryoBridge.Push` queues events while `CryoBridge.WebSuspended` (cap 400,
+  a post would wake the renderer) → `FlushPendingPushes` on resume, so late events (trained/
+  crashed toasts, boot times) land the moment the window is back. **Measured live: 467 MB →
+  21 MB working set (−95%) while hidden; 145 MB after restore; UI state fully intact.**
+
 ### v1.0.18 — released (GitHub) — Pack Optimizer · crash bisector · per-mod profiler · smarter JVM · stale-cache opt-in
 - **Pack Optimizer card** (Performance tab, top) — one-click scan + fix: curated perf mods
   (jar-prefix detection vs `PerfModSlugs`, installs via the existing perf-pack path), ModernFix

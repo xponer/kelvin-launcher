@@ -262,6 +262,8 @@ function createBridgeApi() {
     async rebuildCache(id)             { return call("rebuildCache", { id }); },
     async launchInstance(id, vanilla)  { return call("launchInstance", { id, vanilla: !!vanilla }); },
     async joinServer(id, ip)           { return call("launchInstance", { id, joinServer: ip }); },
+    // Quick Play straight into the newest singleplayer world (MC 1.20+, engine path).
+    async resumeInstance(id)           { return call("launchInstance", { id, resume: true }); },
     async startBenchmark(id)           { return call("startBenchmark", { id }); },
     async cancelBenchmark()            { return call("cancelBenchmark"); },
     async openConsole(id)              { return call("openConsole", { id }); },
@@ -274,6 +276,16 @@ function createBridgeApi() {
     async getSpeedTweaks(id)           { return call("getSpeedTweaks", { id }); },
     async getOptimizeScan(id)          { return call("getOptimizeScan", { id }); },
     async getModLoadProfile(id)        { return call("getModLoadProfile", { id }, 30000); },
+    // ── Safe update (snapshot → update → boot-verify → auto-rollback) ──────────
+    async startSafeUpdate(id)          { return call("startSafeUpdate", { id }); },
+    async cancelSafeUpdate()           { return call("cancelSafeUpdate"); },
+    async getSafeUpdate(id)            { return call("getSafeUpdate", { id }); },
+    async rollbackUpdate(id)           { return call("rollbackUpdate", { id }, 60000); },
+    // ── Public server tunnel (playit.gg) — progress via cryo:tunnelEvent ───────
+    async getTunnel(id)                { return call("getTunnel", { id }); },
+    async startTunnel(id)              { return call("startTunnel", { id }); },
+    async stopTunnel()                 { return call("stopTunnel"); },
+    async resetTunnel()                { return call("resetTunnel"); },
     // ── Crash bisector (find the broken mod) — progress via cryo:bisectEvent ───
     async getBisect(id)                { return call("getBisect", { id }); },
     async startBisect(id)              { return call("startBisect", { id }); },
