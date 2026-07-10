@@ -16,8 +16,10 @@ with the **VSpeed** engine doing the heavy lifting:
 | **VSpeed Turbo** (Java 25 AOT cache) | **75–77 s — about −32%** |
 
 Numbers measured by the launcher's own one-click **Auto-Benchmark** — run it on *your* pack
-and see your own. Around the speed core: a built-in AI crash assistant, a pop-out live game
-console, a server browser, world backups, and one-click speed boosters.
+and see your own. Around the speed core: **safe mod updates that roll themselves back** if
+they break your pack, a **crash bisector** that finds the one broken mod out of 500
+automatically, **one-click public servers** your friends can join with no port forwarding,
+a built-in AI crash assistant, a pop-out live game console, and one-click speed boosters.
 
 > Native WPF host + WebView2 rendering a React UI, a [CmlLib.Core](https://github.com/CmlLib/CmlLib.Core)
 > launch engine, DPAPI-encrypted Microsoft auth, per-instance Java auto-detection,
@@ -31,7 +33,9 @@ console, a server browser, world backups, and one-click speed boosters.
 
 1. Download `Cryo-win-Setup.exe` from the latest release.
 2. Run it — installs per-user (no admin needed), adds a Desktop + Start-menu shortcut.
-3. Windows SmartScreen may warn on first run (the app isn't code-signed yet) — click **More info → Run anyway**.
+3. Windows SmartScreen may warn on first run (the app isn't code-signed yet) — click
+   **More info → Run anyway**. Skeptical? Good — see [Trust & security](#-trust--security)
+   for what you can verify yourself, including building from source.
 4. The launcher **auto-updates** from GitHub: new releases download in the background and apply on restart.
 
 **Prefer to pick your own folder (no installer)?** Download **`Cryo-win-Portable.zip`** from the same
@@ -40,6 +44,33 @@ release and extract it anywhere — it runs in place. The Setup.exe always insta
 the portable build.
 
 > Public test build — expect rough edges. Please report anything you hit. 🙏
+
+## 🔒 Trust & security
+
+New launcher from an unknown dev — skepticism is healthy. Here's what you can verify
+instead of taking anyone's word:
+
+- **The source is public** — this repo *is* the launcher. Every release's full source is
+  committed and tagged. Don't trust the exe? **Build it yourself in ~2 minutes** with the
+  .NET 8 SDK ([instructions below](#%EF%B8%8F-build-from-source)) — no external build
+  servers, nothing hidden.
+- **Auto-update can't ship you something else** — the updater is
+  [Velopack](https://github.com/velopack/velopack) pointed at **this repo's public GitHub
+  Releases**. There is no private update server: every update package sits next to its
+  source code and changelog, publicly diffable. You can verify any downloaded asset by
+  comparing `Get-FileHash <file>` with the SHA-256 digest GitHub shows next to the asset
+  on the release page.
+- **Your Microsoft account is safe by construction** — sign-in uses Microsoft's official
+  flow (the launcher never sees your password), and tokens are stored **DPAPI-encrypted**
+  (current-user scope) — never plaintext, never logged, never sent anywhere but Microsoft.
+- **Third-party credentials stay on your machine** — optional keys (AI, CurseForge) and
+  the playit.gg tunnel secret are stored encrypted locally and are never echoed to the UI
+  or logs.
+- **Not code-signed yet** — that's why SmartScreen warns on first run. Certificates cost
+  money; it's planned. Until then, the portable zip + build-from-source are the
+  zero-trust options.
+- Found something anyway? **[Private vulnerability reporting](https://github.com/xponer/vspeed-cryoLauncher/security/advisories/new)**
+  is enabled — see [SECURITY.md](./SECURITY.md).
 
 ## 🐞 Found a bug?
 
@@ -56,6 +87,16 @@ log (Settings → Self-Check → Open launcher log).
 - **Install modpacks** from Modrinth (`.mrpack`) and CurseForge in one click.
 - **Mod browser** with version picker, SHA-512-verified downloads, **automatic dependency
   resolution**, and one-click updates.
+- **Safe update all — with auto-rollback** — snapshots your mods, installs every available
+  update, **boot-verifies the pack**, and if it crashes, **restores everything
+  automatically**. You end up updated-and-verified or exactly where you started — never
+  broken. A manual Roll back button keeps the snapshot until the next update.
+- **Crash bisector** — pack crashes at startup and you don't know which of 479 mods did
+  it? One button binary-searches your mods folder with automated boots (dependencies
+  handled) until the culprit is isolated and disabled. All jars restored afterwards.
+- **Pack Optimizer** — one-click scan + fix: installs missing performance mods for your
+  loader, flips ModernFix dynamic resources, corrects RAM, enables Turbo, offers the
+  Defender exclusion — then points you at the benchmark to prove the gain.
 - **One-click modpack update** — re-installs the latest pack version; your old mods are
   backed up and your worlds are left untouched.
 - **Server browser** with live ping / MOTD / player count, plus a one-click **Join**
@@ -63,12 +104,20 @@ log (Settings → Self-Check → Open launcher log).
 - **Host a dedicated server** for any pack — one-click setup from the pack's own mods and
   config, a live filtered console with command input, and a full `server.properties` editor
   (NeoForge / Fabric / Vanilla).
+- **Make your server public in one click** — friends join from anywhere with a shareable
+  address, **no router setup, no port forwarding** (free open-source
+  [playit.gg](https://playit.gg) tunnel, auto-provisioned; one-time browser approval).
+- **Resume** — a button next to Play that boots **straight into your last singleplayer
+  world** (Quick Play, MC 1.20+). Zero menus: click, one boot, you're in your base.
 - **Tags, notes & colours** for both mods and whole packs — organize a big library your way,
   with tag filters everywhere.
 - **AI assistant** — diagnoses crashes, mod conflicts, and lag (bring your own free NVIDIA key).
 - **Pop-out live console** — a separate always-on-top-capable window tailing the game log in
   real time, colour-coded by level. Open it right next to Play and watch the whole boot.
-- **World backups**, a live **boot waterfall**, and launch **profiles**.
+- **World backups**, a live **boot waterfall**, a **"Slowest mods" launch profiler**
+  (per-mod boot cost from your real logs), and launch **profiles**.
+- **The launcher sleeps while you play** — minimized or in the tray, the UI suspends and
+  hands its memory back to the game (measured **467 MB → 21 MB**), waking instantly.
 - **VSpeed engine** — startup optimization: AppCDS class cache by default, plus **VSpeed Turbo**
   (Java 25 AOT cache) — measured **−32% boot-to-menu on All the Mods 10** — with a built-in
   one-click A/B benchmark that proves the number on your own pack (details below).
@@ -77,7 +126,9 @@ log (Settings → Self-Check → Open launcher log).
 - **Microsoft sign-in** — tokens encrypted at rest with **Windows DPAPI** (current-user
   scope); the launcher never stores them in plaintext and never sees your password.
 - **Tuning that won't foot-gun you** — RAM sliders capped to your machine's physical
-  memory, JVM presets (Balanced G1GC / Low-pause ZGC / Aikar), and Java auto-detect.
+  memory, JVM presets (Balanced G1GC / Low-pause ZGC / Aikar), Java auto-detect, and
+  **smart defaults**: packs without custom settings get community-standard G1 flags and a
+  heap auto-sized from mod count + installed RAM.
 - **Discord Rich Presence**, auto-update, light/dark themes.
 
 ---
@@ -93,9 +144,11 @@ that ship without a base CDS archive (e.g. some Microsoft OpenJDK builds).
 
 **VSpeed Turbo.** A per-instance toggle (Performance tab) that runs the pack on a **Java 25**
 runtime with a Project-Leyden **AOT cache**: one training launch records everything the JVM
-loads and compiles, and every launch after starts from that snapshot instead of redoing it.
-Cryo downloads the runtime, trains, assembles and invalidates the cache automatically (changing
-mods retrains), and measures every boot so you can see the difference.
+loads and compiles, and every launch after starts from that snapshot instead of redoing it
+(plus JDK 25's Compact Object Headers for less GC work during boot). Cryo downloads the
+runtime, trains, assembles and validates the cache automatically, and measures every boot.
+When mods change, the cache goes stale and **you choose when to retrain** — no surprise
+slow launches; stale launches just run the normal path until you click Retrain.
 
 Measured on **All the Mods 10** (479 mods): default launch 104–116 s to the main menu, Turbo
 **75–77 s** — about **−32%**. During training you'll see a wall of harmless `[aot] Skipping…`
