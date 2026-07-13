@@ -362,6 +362,69 @@ public static class TurboRuntime
         return -1;
     }
 
+    /// <summary>
+    /// Measures click→IN-WORLD for Quick Play launches (Resume): tails the log
+    /// until the integrated server reports "joined the game". There is no main
+    /// menu on that path, so this is the real end of the launch. Returns
+    /// seconds, -1 on exit/timeout, -2 when a fatal/error-screen marker shows.
+    /// </summary>
+    public static async Task<long> WatchJoinAsync(string logPath, Process proc, CancellationToken ct = default)
+    {
+        DateTime start;
+        try { start = proc.StartTime.ToUniversalTime(); }
+        catch { start = DateTime.UtcNow; }
+
+        long pos = 0; string carry = "";
+        var deadline = DateTime.UtcNow.AddMinutes(20);
+
+        while (!ct.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            bool exited = false;
+            try { exited = proc.HasExited; } catch { exited = true; }
+            if (exited) return -1;
+
+            try
+            {
+                if (File.Exists(logPath))
+                {
+                    using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read,
+                                                  FileShare.ReadWrite | FileShare.Delete);
+                    if (fs.Length < pos) { pos = 0; carry = ""; }
+                    if (fs.Length > pos)
+                    {
+                        fs.Seek(pos, SeekOrigin.Begin);
+                        var buf = new byte[fs.Length - pos];
+                        int n = await fs.ReadAsync(buf, ct);
+                        pos += n;
+                        carry += Encoding.UTF8.GetString(buf, 0, n);
+
+                        int nl;
+                        while ((nl = carry.IndexOf('\n')) >= 0)
+                        {
+                            var line = carry[..nl].TrimEnd('\r');
+                            carry = carry[(nl + 1)..];
+                            if (line.Length == 0) continue;
+
+                            if (line.Contains("Error during pre-loading phase", StringComparison.Ordinal)
+                             || line.Contains("Mod loading has failed", StringComparison.OrdinalIgnoreCase)
+                             || line.Contains("Crash report saved", StringComparison.OrdinalIgnoreCase)
+                             || line.Contains("A fatal error has been detected", StringComparison.Ordinal)
+                             || line.Contains("---- Minecraft Crash Report", StringComparison.Ordinal))
+                                return -2;
+
+                            if (line.Contains("joined the game", StringComparison.Ordinal))
+                                return (long)Math.Max(1, (DateTime.UtcNow - start).TotalSeconds);
+                        }
+                    }
+                }
+            }
+            catch (IOException) { /* log rotating — retry next tick */ }
+
+            try { await Task.Delay(700, ct); } catch (TaskCanceledException) { return -1; }
+        }
+        return -1;
+    }
+
     /// <summary>Finds the AOT assembly JVM: a java/javaw process running from the
     /// Turbo runtime dir that isn't the (dead) game process. Only meaningful to
     /// call after the game has exited.</summary>

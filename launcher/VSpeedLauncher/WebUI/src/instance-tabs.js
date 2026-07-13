@@ -282,6 +282,7 @@ function TurboCard({ instance, api, hasBridge }) {
     "standard": { label: "Default",        color: "var(--text-faint)" },
     "training": { label: "Turbo training", color: "#FBBF77" },
     "turbo":    { label: "Turbo",          color: "var(--acc-2)" },
+    "resume":   { label: "Resume → world", color: "#34D399" },   // click → in-world, no menus
   };
   function ago(t) {
     const m = Math.max(0, Math.round((Date.now() - t) / 60000));
@@ -384,6 +385,66 @@ function TurboCard({ instance, api, hasBridge }) {
 }
 
 /* ============ SPEED BOOSTERS (Defender · ModernFix dynamic resources) ============ */
+/* ============ PREPARE PACK (optimize → train Turbo → benchmark, unattended) ============ */
+function PreparePackCard({ instance, api, hasBridge }) {
+  const [st, setSt] = tS(null);     // { running }
+  const [ev, setEv] = tS(null);     // last prepEvent
+
+  async function load() {
+    if (!hasBridge || !api.getPrepare) return;
+    const r = await api.getPrepare(instance.id).catch(() => null);
+    if (r && r.ok) setSt(r);
+  }
+  tE(() => { load(); }, [hasBridge, instance.id]);
+  tE(() => {
+    function onEv(e) {
+      const d = e.detail || {};
+      setEv(d);
+      if (d.phase === "done")
+        window.toast({ tone: "success", icon: "zap", title: "Pack ready",
+          body: d.bootDefault + "s → " + d.bootTurbo + "s (−" + d.deltaPercent + "%)" });
+      else if (d.phase === "error")
+        window.toast({ tone: "danger", icon: "alert", title: "Prepare failed", body: d.message || "" });
+      if (["done", "error", "cancelled"].includes(d.phase)) load();
+    }
+    window.addEventListener("cryo:prepEvent", onEv);
+    return () => window.removeEventListener("cryo:prepEvent", onEv);
+  }, [instance.id]);
+
+  async function start() {
+    const ok = window.confirm(
+      "Prepare \"" + (instance.name || instance.id) + "\"?\n\n" +
+      "Fully unattended, ~10–25 minutes on a big pack:\n" +
+      "• install curated performance mods\n• enable ModernFix dynamic resources\n" +
+      "• tune memory + enable VSpeed Turbo\n• train the AOT cache and benchmark Default vs Turbo\n\n" +
+      "The game will launch and close by itself 2–3 times. Come back to a tuned pack with a measured number.");
+    if (!ok) return;
+    setEv(null);
+    const r = await api.startPrepare(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok === false) window.toast({ tone: "warn", icon: "info", title: "Can't start", body: r.error || "" });
+    load();
+  }
+
+  const running = !!(st && st.running);
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)", border: "1px solid var(--acc-soft-2)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" } },
+      React.createElement(Icon, { name: "sparkles", size: 17, style: { color: "var(--acc-2)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680, flex: 1 } }, "Prepare pack"),
+      running && React.createElement(Badge, { tone: "accent", dot: true }, "running"),
+      running
+        ? React.createElement(Btn, { variant: "outline", size: "sm", icon: "x", onClick: () => api.cancelPrepare().catch(() => {}) }, "Cancel")
+        : React.createElement(Btn, { variant: "primary", size: "sm", icon: "sparkles", onClick: start }, "Prepare this pack")),
+    React.createElement("p", { style: { margin: "8px 0 0", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
+      "Everything below as one unattended run: optimize → enable + train Turbo → benchmark. Install a pack, click once, come back to a tuned pack with a measured before/after."),
+    running && ev && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, paddingTop: 10, fontSize: 12.5, color: "var(--text-dim)" } },
+      React.createElement(Icon, { name: "loader", size: 14, spin: true }),
+      React.createElement("span", null, (ev.step ? "Step " + ev.step + "/" + (ev.total || 4) + " — " : "") + (ev.message || "working…"))),
+    !running && ev && ev.phase === "done" && React.createElement("div",
+      { style: { marginTop: 10, padding: "10px 12px", borderRadius: "var(--r-lg)", background: "var(--success-dim)", border: "1px solid color-mix(in oklab, var(--success) 26%, transparent)", fontSize: 12.5 } },
+      React.createElement("b", null, ev.bootDefault + "s default → " + ev.bootTurbo + "s Turbo (−" + ev.deltaPercent + "%)"),
+      React.createElement("div", { style: { color: "var(--text-dim)", marginTop: 3 } }, "Optimized, trained and measured — details in the Turbo and Benchmark cards below.")));
+}
+
 /* ============ PACK OPTIMIZER (one-click scan + fix + measure) ============ */
 function PackOptimizerCard({ instance, api, hasBridge }) {
   const [scan, setScan] = tS(null);   // getOptimizeScan result
@@ -1026,6 +1087,9 @@ function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
         React.createElement(Toggle, { checked: enabled, onChange: setEnabled }),
       ),
     ),
+
+    // Prepare pack — optimize → train Turbo → benchmark, one unattended click
+    React.createElement(PreparePackCard, { instance, api, hasBridge }),
 
     // Pack Optimizer — one-click scan + fix (perf mods, dynRes, RAM, Turbo, Defender)
     React.createElement(PackOptimizerCard, { instance, api, hasBridge }),

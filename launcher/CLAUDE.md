@@ -111,6 +111,39 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.0.20 — released (GitHub) — Prepare pack pipeline · parallel installs · Resume click→in-world timing
+- **"Prepare pack"** (`Core/CryoBridge.Prepare.cs`, card at the top of Performance) — the whole
+  toolkit as ONE unattended button: perf mods → ModernFix dynRes → RAM raise-if-low → Turbo
+  enable (+ runtime download) → `RunBenchmarkAsync` (now returns `(defBoot, turboBoot)`), then
+  a "pack ready" report. Claims `_benchRunning` for the whole run so benchmark/bisector/safe-
+  update can't start mid-pipeline. Defender exclusion deliberately excluded (UAC ≠ unattended).
+  **VERIFIED LIVE on ATM10: default 145s → Turbo 85s = −41.4%** — the best number so far, and
+  the first clean benchmark of the Compact-Object-Headers cache.
+- **CRITICAL fix found by the first Prepare run: the perf pack could BREAK a pack.** It
+  installed embeddium next to ATM10's sodium+iris (FML incompatibility crash at pre-load) and
+  a DUPLICATE ModernFix (pack ships a different filename → exact-name check missed it).
+  Fixes in `InstallPerfPackCoreAsync`: (1) skip a slug when its jar-prefix is already present
+  in ANY version; (2) new `PerfModConflicts` map (embeddium⟷sodium/iris/oculus/rubidium,
+  lithium⟷canary) — conflicting slugs are skipped AND hidden from the optimizer scan's
+  "missing" list; (3) the core now returns the filenames it actually ADDED, and Prepare
+  removes them again if the benchmark can't verify the pack (same philosophy as safe-update).
+  Verified live: rerun logged "skipping embeddium — a conflicting mod is already installed",
+  installed only saturn, pipeline completed. (ATM10 was hand-restored to its exact 479 jars
+  before the rerun; the pack's own "Crash Assistant" popups during benchmarks are cosmetic —
+  it flags the benchmark's intentional kill-after-measure as an unclean exit.)
+- **Parallel modpack downloads** — both install paths (Modrinth `.mrpack` + CurseForge
+  manifest) now download 6 files at a time (SemaphoreSlim + Interlocked progress; per-file
+  failures still counted/logged individually). **Verified live: Fabulously Optimized, 43
+  files, 0 failed, 11s end-to-end** (was latency-bound sequential before, typically 3-5×).
+- **Resume now measures what it actually delivers**: new `TurboRuntime.WatchJoinAsync` tails
+  for "joined the game" (+ the fatal markers) and records mode **"resume"** = click→in-world
+  seconds (`bootMeasured` push, green "Resume → world" row in TurboCard). Menu-boot records
+  are SUPPRESSED on resume launches (Quick Play has no menu — the watcher measured a bogus
+  162s "turbo" entry, seen live; it was removed from ATM10's state). Verified live: 166s
+  click→in-world on the standard path.
+- Bridge: `startPrepare/cancelPrepare/getPrepare` (+ store), events `prepEvent`
+  (mods/dynres/tune/runtime/benchmark/done{numbers}/error/cancelled).
+
 ### v1.0.19 — released (GitHub) — Safe updates with auto-rollback + public server tunnel + Resume + launcher sleeps
 - **Public access for hosted servers** (`Core/CryoBridge.Tunnel.cs`, card in the Host server
   tab) — "Make public" gives friends a playit.gg address that reaches the Cryo-hosted server

@@ -281,6 +281,10 @@ function createBridgeApi() {
     async cancelSafeUpdate()           { return call("cancelSafeUpdate"); },
     async getSafeUpdate(id)            { return call("getSafeUpdate", { id }); },
     async rollbackUpdate(id)           { return call("rollbackUpdate", { id }, 60000); },
+    // ── Prepare pack (optimize + train + benchmark) — progress via cryo:prepEvent ──
+    async startPrepare(id)             { return call("startPrepare", { id }); },
+    async cancelPrepare()              { return call("cancelPrepare"); },
+    async getPrepare(id)               { return call("getPrepare", { id }); },
     // ── Public server tunnel (playit.gg) — progress via cryo:tunnelEvent ───────
     async getTunnel(id)                { return call("getTunnel", { id }); },
     async startTunnel(id)              { return call("startTunnel", { id }); },

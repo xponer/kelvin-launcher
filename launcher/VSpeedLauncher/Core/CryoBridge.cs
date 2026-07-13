@@ -341,6 +341,9 @@ public sealed partial class CryoBridge
             "startBisect"         => StartBisect(args.Str("id")),
             "cancelBisect"        => CancelBisect(),
             "restoreBisect"       => RestoreBisect(args.Str("id")),
+            "getPrepare"          => GetPrepare(args.Str("id")),
+            "startPrepare"        => StartPrepare(args.Str("id")),
+            "cancelPrepare"       => CancelPrepare(),
             "getTunnel"           => GetTunnel(args.Str("id")),
             "startTunnel"         => StartTunnel(args.Str("id")),
             "stopTunnel"          => StopTunnel(),
@@ -1931,7 +1934,9 @@ public sealed partial class CryoBridge
     /// at shutdown), (3) Turbo measured run from the cache.
     /// Requires: Cryo engine installed, signed in, Turbo enabled + runtime ready.
     /// </summary>
-    private async Task RunBenchmarkAsync(RunningInstance inst, CancellationToken ct)
+    /// <summary>Returns (defaultBoot, turboBoot) seconds; -1 for an unmeasured leg.
+    /// Failures are reported via benchmarkProgress events, not thrown.</summary>
+    private async Task<(long defBoot, long turboBoot)> RunBenchmarkAsync(RunningInstance inst, CancellationToken ct)
     {
         var id = inst.Entry.Id;
         long defBoot = -1, turboBoot = -1;
@@ -2038,6 +2043,7 @@ public sealed partial class CryoBridge
             try { if (inst.State != InstanceState.Stopped) _manager.Kill(inst); } catch { /* ignore */ }
             _benchRunning = false;
         }
+        return (defBoot, turboBoot);
     }
 
     /// <summary>One benchmark launch: engine-launch in <paramref name="mode"/>
@@ -2495,6 +2501,20 @@ Example for an unknown error:
     };
 
     /// <summary>
+    /// Mutually-exclusive companions: never auto-install the key when a jar
+    /// matching any of these prefixes is already present. Renderer forks are the
+    /// dangerous case — installing embeddium next to ATM10's sodium+iris took the
+    /// whole pack down (seen live: FML incompatibility crash at pre-load).
+    /// </summary>
+    private static readonly Dictionary<string, string[]> PerfModConflicts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["embeddium"] = new[] { "sodium", "iris", "oculus", "rubidium" },
+        ["sodium"]    = new[] { "embeddium", "rubidium", "optifine" },
+        ["lithium"]   = new[] { "canary" },
+        ["canary"]    = new[] { "lithium" },
+    };
+
+    /// <summary>
     /// One-call state report for the Pack Optimizer card: which curated perf mods
     /// are present, ModernFix/dynamic-resources state, Defender exclusion, RAM vs
     /// recommendation, custom JVM args, and Turbo support/state. The card composes
@@ -2519,13 +2539,18 @@ Example for an unknown error:
         static string Norm(string s) => s.Replace("-", "").Replace("_", "");
 
         var curated  = PerfModSlugs.GetValueOrDefault(loader) ?? Array.Empty<string>();
-        var perfMods = curated.Select(slug =>
-        {
-            var prefixes = PerfModJarPrefixes.GetValueOrDefault(slug) ?? new[] { Norm(slug) };
-            bool installed = jars.Any(j => prefixes.Any(p =>
-                Norm(j).StartsWith(p, StringComparison.OrdinalIgnoreCase)));
-            return new { slug, installed };
-        }).ToArray();
+        var perfMods = curated
+            // A slug whose conflicting companion is installed isn't "missing" —
+            // it must never be offered (embeddium on a sodium/iris pack).
+            .Where(slug => !(PerfModConflicts.TryGetValue(slug, out var confl)
+                             && jars.Any(j => confl.Any(p => Norm(j).StartsWith(Norm(p), StringComparison.OrdinalIgnoreCase)))))
+            .Select(slug =>
+            {
+                var prefixes = PerfModJarPrefixes.GetValueOrDefault(slug) ?? new[] { Norm(slug) };
+                bool installed = jars.Any(j => prefixes.Any(p =>
+                    Norm(j).StartsWith(p, StringComparison.OrdinalIgnoreCase)));
+                return new { slug, installed };
+            }).ToArray();
 
         bool modernfix = jars.Any(j => j.StartsWith("modernfix", StringComparison.OrdinalIgnoreCase));
         bool dynRes = false;
@@ -2571,19 +2596,42 @@ Example for an unknown error:
         {
             try
             {
+                var (installed, skipped, _) = await InstallPerfPackCoreAsync(instanceId);
+                Logger.Info($"PerformancePack({instanceId}): installed={installed}, skipped={skipped}");
+                Push("perfPackDone", new { ok = true, installed, skipped });
+            }
+            catch (Exception e)
+            {
+                Logger.Warn($"InstallPerformancePack({instanceId}): {e.Message}");
+                Push("perfPackDone", new { ok = false, error = e.Message });
+            }
+        });
+        return new { ok = true };
+    }
+
+    /// <summary>Awaitable core of the perf-pack install (shared with "Prepare pack").
+    /// Throws for unsupported loaders; pushes perfPackProgress along the way.
+    /// Returns the filenames it actually ADDED so callers can undo on a crash.</summary>
+    private async Task<(int installed, int skipped, List<string> added)> InstallPerfPackCoreAsync(string instanceId)
+    {
+        {
+            {
                 var meta   = InstanceMetaReader.Read(instanceId, InstanceDataDir(instanceId));
                 var mc     = meta.Mc ?? "";
                 var loader = meta.Loader ?? "";
                 if (!PerfModSlugs.TryGetValue(loader.ToLowerInvariant(), out var slugs))
-                {
-                    Push("perfPackDone", new { ok = false, error = $"No performance pack for '{(loader.Length == 0 ? "Vanilla" : loader)}'. Use Fabric, Quilt, Forge or NeoForge." });
-                    return;
-                }
+                    throw new Exception($"No performance pack for '{(loader.Length == 0 ? "Vanilla" : loader)}'. Use Fabric, Quilt, Forge or NeoForge.");
                 var modsDir = Path.Combine(InstanceDataDir(instanceId), "instances", instanceId, "minecraft", "mods");
                 Directory.CreateDirectory(modsDir);
 
                 var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var added   = new List<string>();
                 int installed = 0, skipped = 0, i = 0;
+
+                static string Norm(string s) => s.Replace("-", "").Replace("_", "");
+                string[] JarsNow() { try { return Directory.GetFiles(modsDir, "*.jar").Select(f => Path.GetFileName(f)!).ToArray(); } catch { return Array.Empty<string>(); } }
+                static bool AnyByPrefix(string[] jars, IEnumerable<string> prefixes) =>
+                    jars.Any(j => prefixes.Any(p => Norm(j).StartsWith(Norm(p), StringComparison.OrdinalIgnoreCase)));
 
                 // Downloads a version node's primary file (skips if already present); returns true if a file landed.
                 async Task<bool> Grab(JsonNode? ver)
@@ -2596,7 +2644,10 @@ Example for an unknown error:
                     var fn  = pf?["filename"]?.GetValue<string>() ?? "";
                     if (url.Length == 0 || fn.Length == 0) return false;
                     if (!File.Exists(Path.Combine(modsDir, Path.GetFileName(fn))))
+                    {
                         await _modrinth.DownloadFileAsync(url, fn, pf?["hashes"]?["sha512"]?.GetValue<string>(), modsDir);
+                        added.Add(Path.GetFileName(fn));
+                    }
                     return true;
                 }
 
@@ -2604,6 +2655,23 @@ Example for an unknown error:
                 {
                     i++;
                     Push("perfPackProgress", new { message = $"Installing {slug}…", done = i, total = slugs.Length });
+
+                    // Never double-install: the pack may already ship this mod under a
+                    // DIFFERENT filename/version (exact-name checks missed ATM10's
+                    // ModernFix and installed a duplicate mod-id — instant crash).
+                    var jars = JarsNow();
+                    var own  = PerfModJarPrefixes.GetValueOrDefault(slug) ?? new[] { Norm(slug) };
+                    if (AnyByPrefix(jars, own)) { skipped++; continue; }
+
+                    // Never install next to a conflicting companion (embeddium beside
+                    // sodium+iris = FML incompatibility crash — seen live on ATM10).
+                    if (PerfModConflicts.TryGetValue(slug, out var confl) && AnyByPrefix(jars, confl))
+                    {
+                        skipped++;
+                        Logger.Info($"PerfPack({instanceId}): skipping {slug} — a conflicting mod is already installed");
+                        continue;
+                    }
+
                     try
                     {
                         var ver = (await _modrinth.GetVersionsAsync(slug, mc, loader) as JsonArray)?.FirstOrDefault();
@@ -2632,16 +2700,9 @@ Example for an unknown error:
                     catch (Exception e) { skipped++; Logger.Warn($"PerfPack {slug}: {e.Message}"); }
                 }
 
-                Logger.Info($"PerformancePack({instanceId}): installed={installed}, skipped={skipped}");
-                Push("perfPackDone", new { ok = true, installed, skipped });
+                return (installed, skipped, added);
             }
-            catch (Exception e)
-            {
-                Logger.Warn($"InstallPerformancePack({instanceId}): {e.Message}");
-                Push("perfPackDone", new { ok = false, error = e.Message });
-            }
-        });
-        return new { ok = true };
+        }
     }
 
     // ── CurseForge (optional second source for the mod browser) ──────────────────
@@ -3466,8 +3527,13 @@ Example for an unknown error:
                 var mcDir = Path.Combine(instanceDir, "minecraft");
                 StorePackSource(id, "modrinth", projectId, versionId, name);
 
+                // Parallel downloads (6 at a time): big packs have hundreds of mods
+                // and sequential fetches make install time latency-bound — this
+                // typically cuts a large pack's install by 2-3×.
                 int total = indexFiles?.Count ?? 0, done = 0, failed = 0;
                 if (indexFiles != null)
+                {
+                    var jobs = new List<(string url, string dest, string path)>();
                     foreach (var f in indexFiles)
                     {
                         var path = f?["path"]?.GetValue<string>() ?? "";
@@ -3475,11 +3541,22 @@ Example for an unknown error:
                         if (string.IsNullOrEmpty(path) || dls == null || dls.Count == 0) { done++; continue; }
                         var dest = Path.GetFullPath(Path.Combine(mcDir, path));
                         if (!dest.StartsWith(mcDir, StringComparison.OrdinalIgnoreCase)) { done++; continue; }
-                        try { await DownloadToFileAsync(dls[0]!.GetValue<string>(), dest); }
-                        catch (Exception fe) { failed++; Logger.Warn($"mrpack file '{path}': {fe.Message}"); }
-                        done++;
-                        Push("modpackProgress", new { phase = "files", message = $"Downloading mods… {done}/{total}", done, total });
+                        jobs.Add((dls[0]!.GetValue<string>(), dest, path));
                     }
+                    using var gate = new SemaphoreSlim(6);
+                    await Task.WhenAll(jobs.Select(async j =>
+                    {
+                        await gate.WaitAsync();
+                        try { await DownloadToFileAsync(j.url, j.dest); }
+                        catch (Exception fe) { Interlocked.Increment(ref failed); Logger.Warn($"mrpack file '{j.path}': {fe.Message}"); }
+                        finally
+                        {
+                            gate.Release();
+                            var d = Interlocked.Increment(ref done);
+                            Push("modpackProgress", new { phase = "files", message = $"Downloading mods… {d}/{total}", done = d, total });
+                        }
+                    }));
+                }
 
                 Push("modpackProgress", new { phase = "overrides", message = "Applying overrides…" });
                 using (var z = System.IO.Compression.ZipFile.OpenRead(temp)) ExtractOverrides(z, mcDir);
@@ -3559,22 +3636,38 @@ Example for an unknown error:
                 Push("modpackProgress", new { phase = "resolve", message = $"Resolving {projectFileIds.Count} mods…" });
                 var urlMap = await _curse.GetFilesByIdsAsync(key, projectFileIds.Select(p => p.fileId));
 
+                // Parallel downloads (6 at a time) — same rationale as the Modrinth path.
                 int total = projectFileIds.Count, done = 0, failed = 0;
-                foreach (var (_, fid) in projectFileIds)
                 {
-                    urlMap.TryGetValue(fid, out var info);
-                    var fname = info.fileName;
-                    var url   = info.url;
-                    if (string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(fname))
-                        url = CurseForgeClient.FallbackUrl(fid, fname);
-                    if (!string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(fname))
+                    var jobs = new List<(long fid, string url, string dest)>();
+                    foreach (var (_, fid) in projectFileIds)
                     {
-                        try { await DownloadToFileAsync(url, Path.Combine(modsDir, Path.GetFileName(fname))); }
-                        catch (Exception fe) { failed++; Logger.Warn($"CF file {fid}: {fe.Message}"); }
+                        urlMap.TryGetValue(fid, out var info);
+                        var fname = info.fileName;
+                        var url   = info.url;
+                        if (string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(fname))
+                            url = CurseForgeClient.FallbackUrl(fid, fname);
+                        if (!string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(fname))
+                            jobs.Add((fid, url!, Path.Combine(modsDir, Path.GetFileName(fname))));
+                        else
+                        {
+                            failed++; done++;
+                            Push("modpackProgress", new { phase = "files", message = $"Downloading mods… {done}/{total}", done, total });
+                        }
                     }
-                    else failed++;
-                    done++;
-                    Push("modpackProgress", new { phase = "files", message = $"Downloading mods… {done}/{total}", done, total });
+                    using var gate = new SemaphoreSlim(6);
+                    await Task.WhenAll(jobs.Select(async j =>
+                    {
+                        await gate.WaitAsync();
+                        try { await DownloadToFileAsync(j.url, j.dest); }
+                        catch (Exception fe) { Interlocked.Increment(ref failed); Logger.Warn($"CF file {j.fid}: {fe.Message}"); }
+                        finally
+                        {
+                            gate.Release();
+                            var d = Interlocked.Increment(ref done);
+                            Push("modpackProgress", new { phase = "files", message = $"Downloading mods… {d}/{total}", done = d, total });
+                        }
+                    }));
                 }
 
                 Push("modpackProgress", new { phase = "overrides", message = "Applying overrides…" });
@@ -5367,10 +5460,14 @@ Example for an unknown error:
                 // quiet-log markers — no pipe mod needed) and record it, so the
                 // Performance tab can show Default-vs-Turbo times from real launches.
                 var launchMode = mode == "default" ? "default" : vspeedMode;
+                bool isResume  = !string.IsNullOrWhiteSpace(resumeWorld);
                 _ = Task.Run(async () =>
                 {
                     long secs = await TurboRuntime.WatchBootAsync(engineLog, proc);
-                    if (secs > 0)
+                    // Quick Play has no main menu — the menu markers fire late/fuzzy
+                    // there, so a resume launch must not pollute the default/turbo
+                    // averages; its real number is the world-join record below.
+                    if (secs > 0 && !isResume)
                     {
                         TurboRuntime.RecordBoot(instanceId, secs, launchMode);
                         Logger.Info($"Boot measured for {instanceId}: {secs}s ({launchMode})");
@@ -5378,6 +5475,20 @@ Example for an unknown error:
                     }
                     bootTcs?.TrySetResult(secs);
                 });
+
+                // Resume skips the menu entirely — measure the number that actually
+                // matters there: click → standing in the world ("joined the game").
+                if (!string.IsNullOrWhiteSpace(resumeWorld))
+                    _ = Task.Run(async () =>
+                    {
+                        long secs = await TurboRuntime.WatchJoinAsync(engineLog, proc);
+                        if (secs > 0)
+                        {
+                            TurboRuntime.RecordBoot(instanceId, secs, "resume");
+                            Logger.Info($"World-join measured for {instanceId}: {secs}s (resume, click→in-world)");
+                            Push("bootMeasured", new { id = instanceId, seconds = secs, mode = "resume" });
+                        }
+                    });
 
                 // On a training run the JVM stays alive for MINUTES after the player
                 // closes the window (it records + assembles the AOT cache before
