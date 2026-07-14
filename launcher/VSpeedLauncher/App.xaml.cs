@@ -71,10 +71,61 @@ public partial class App : Application
         Pipe = new PipeServer(Manager);
         Pipe.Start();
 
+        // Rebrand cleanup: Velopack renames its shortcuts on update, but their icon
+        // points at the ROOT stub exe, which updates never replace — so users kept
+        // the old snowflake after Cryo→Kelvin. Repoint the icon at the versioned
+        // exe and sweep any dead legacy link. Cheap and idempotent.
+        _ = Task.Run(FixBrandShortcuts);
+
         Tray = new TrayIcon(Manager, Config, OpenMainWindow, OnExitRequested);
 
         if (Config.Data.ShowOnLaunch)
             OpenMainWindow();
+    }
+
+    /// <summary>
+    /// After the Cryo→Kelvin rebrand: fix the managed shortcuts' icons (they
+    /// reference the never-updated root stub exe → old icon persisted) and
+    /// delete dead legacy "Cryo Launcher" links. Safe to run every start.
+    /// </summary>
+    private static void FixBrandShortcuts()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return;
+            var shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null) return;
+            dynamic? shell = Activator.CreateInstance(shellType);
+            if (shell == null) return;
+
+            foreach (var dir in new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                             @"Microsoft\Windows\Start Menu\Programs"),
+            })
+            {
+                try
+                {
+                    var dead = Path.Combine(dir, "Cryo Launcher.lnk");
+                    if (File.Exists(dead)) File.Delete(dead);
+
+                    var lnkPath = Path.Combine(dir, "Kelvin.lnk");
+                    if (!File.Exists(lnkPath)) continue;
+                    dynamic lnk = shell.CreateShortcut(lnkPath);
+                    var want = exe + ",0";
+                    if (!string.Equals((string)lnk.IconLocation, want, StringComparison.OrdinalIgnoreCase))
+                    {
+                        lnk.IconLocation = want;
+                        lnk.Save();
+                        Logger.Info($"Shortcut icon refreshed: {lnkPath}");
+                    }
+                }
+                catch (Exception inner) { Logger.Warn($"Shortcut fix ({dir}): {inner.Message}"); }
+            }
+        }
+        catch (Exception e) { Logger.Warn($"Shortcut migration: {e.Message}"); }
     }
 
     public void OpenMainWindow()

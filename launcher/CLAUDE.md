@@ -111,6 +111,17 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.1.1 — released (GitHub) — shortcut icon migration after the rebrand
+- Found live on the user's desktop after the 1.1.0 update: Velopack RENAMES its managed
+  shortcuts on update (Cryo Launcher.lnk → Kelvin.lnk, from packTitle) but their
+  IconLocation references the ROOT stub exe (`%LocalAppData%\Cryo\VSpeedLauncher.exe`),
+  which updates never replace → old snowflake icon persisted. `App.FixBrandShortcuts()`
+  (startup, background, idempotent): repoints Desktop + Start Menu Kelvin.lnk icons at
+  `Environment.ProcessPath` (the versioned exe, stable `current\` path) and deletes dead
+  legacy "Cryo Launcher.lnk" files. Pinned-taskbar links are left alone (renaming breaks
+  pins) — release notes tell users to re-pin once. v1.1.1 assets renamed to Kelvin-* on
+  GitHub post-upload (same procedure as 1.1.0; feed nupkgs untouched).
+
 ### v1.1.0 — released (GitHub) — REBRAND: Cryo → Kelvin + full "instrument panel" redesign
 - **Release-page scrub (user request: "delete every trace of the old name")**: all 21 old
   "Cryo v1.0.x" releases DELETED (tags kept — they're just version numbers; updaters only
