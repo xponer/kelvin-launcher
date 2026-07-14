@@ -485,7 +485,7 @@ function LibraryScreen() {
 
     state === "empty" && React.createElement(Card, { style: { borderRadius: "var(--r-2xl)" } },
       React.createElement(EmptyState, {
-        icon: "snowflake", title: t("lib.empty.title"), body: t("lib.empty.body"),
+        icon: "gauge", title: t("lib.empty.title"), body: t("lib.empty.body"),
         action: React.createElement("div", { style: { display: "flex", gap: 10 } },
           React.createElement(Btn, { variant: "primary", icon: "plus", onClick: () => setShowCreate(true) }, t("lib.empty.cta")),
           React.createElement(Btn, { variant: "subtle", icon: "download", onClick: () => navigate("browse") }, "Browse modpacks"),

@@ -111,7 +111,14 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
-### v1.1.0 — unreleased — REBRAND: Cryo → Kelvin + full "instrument panel" redesign
+### v1.1.0 — released (GitHub) — REBRAND: Cryo → Kelvin + full "instrument panel" redesign
+- **Release-page scrub (user request: "delete every trace of the old name")**: all 21 old
+  "Cryo v1.0.x" releases DELETED (tags kept — they're just version numbers; updaters only
+  read the latest release, so nothing breaks). On v1.1.0 the Setup/Portable assets were
+  RENAMED post-upload to `Kelvin-win-Setup.exe` / `Kelvin-win-Portable.zip` — safe because
+  `releases.win.json` references only the nupkgs (verified from the uploaded feed). The
+  nupkgs MUST stay `Cryo-*.nupkg` (packId) or existing installs strand. `docs/og.png`
+  re-rendered in the new brand (GDI+ script in scratchpad).
 - **New name: Kelvin** (unit of absolute temperature — the launcher's whole story is cold
   starts, measured). Repo renamed to `github.com/xponer/kelvin-launcher` (GitHub redirects
   the old URLs; this repo already survived one rename, Velopack follows it). **Kept, on

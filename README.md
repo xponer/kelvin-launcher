@@ -34,14 +34,14 @@ it reports whatever it finds, including "no difference".
 
 ## Download
 
-**[Latest installer — Kelvin-Setup (Cryo-win-Setup.exe)](https://github.com/xponer/kelvin-launcher/releases/latest)**
+**[Latest installer — Kelvin-win-Setup.exe](https://github.com/xponer/kelvin-launcher/releases/latest)**
 
 1. Run the installer — per-user, no admin, Desktop + Start-menu shortcut.
 2. SmartScreen will warn on first run (not code-signed yet — see
    [Trust & security](#trust--security), including how to build it yourself).
 3. Auto-updates come from this repo's public GitHub Releases.
 
-Prefer your own folder? `Cryo-win-Portable.zip` from the same release runs in place.
+Prefer your own folder? `Kelvin-win-Portable.zip` from the same release runs in place.
 
 ## What it does
 

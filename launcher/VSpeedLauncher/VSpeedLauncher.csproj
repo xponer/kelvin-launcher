@@ -9,7 +9,7 @@
     <ApplicationIcon>cryo.ico</ApplicationIcon>
 
     <!-- App version вЂ” bump for each release; Velopack uses it as the SemVer. -->
-    <Version>1.0.20</Version>
+    <Version>1.1.0</Version>
     <!-- Velopack must run before WPF, so we use an explicit Program.Main. -->
     <StartupObject>VSpeedLauncher.Program</StartupObject>
 
