@@ -19,7 +19,7 @@ public sealed class ModrinthClient
     private static HttpClient CreateClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        c.DefaultRequestHeaders.UserAgent.ParseAdd("Cryo-Launcher/1.0 (Minecraft modpack launcher)");
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("Kelvin-Launcher/1.0 (Minecraft modpack launcher)");
         return c;
     }
 

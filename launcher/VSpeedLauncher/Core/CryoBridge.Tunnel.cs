@@ -261,7 +261,7 @@ public sealed partial class CryoBridge
                         var body = new System.Text.Json.Nodes.JsonObject
                         {
                             ["name"]        = "cryo",
-                            ["description"] = "Cryo Launcher hosted server",
+                            ["description"] = "Kelvin launcher hosted server",
                             ["tunnel_type"] = "minecraft-java",
                             ["port_type"]   = "tcp",
                             ["port_count"]  = 1,

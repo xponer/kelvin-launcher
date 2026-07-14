@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — Instance Detail tabs: Performance / Mods / Settings
+   Kelvin — Instance Detail tabs: Performance / Mods / Settings
    ============================================================ */
 const { useState: tS, useEffect: tE, useMemo: tM, useRef: tRf } = React;
 
@@ -85,8 +85,8 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
     if (!hasBridge) { window.toast({ tone: "warn", icon: "info", title: "Preview mode", body: "Auto-benchmark runs in the desktop launcher." }); return; }
     const ok = window.confirm(
       "Run the automated Default vs Turbo benchmark?\n\n" +
-      "Cryo will launch \"" + instance.name + "\" 2–3 times (Default → Turbo training if the cache isn't built yet → Turbo measured) and close it each time at the main menu.\n\n" +
-      "Needs: Cryo engine installed + signed in + VSpeed Turbo enabled (card above). Takes ~5–12 minutes; don't use the PC for gaming meanwhile.");
+      "Kelvin will launch \"" + instance.name + "\" 2–3 times (Default → Turbo training if the cache isn't built yet → Turbo measured) and close it each time at the main menu.\n\n" +
+      "Needs: Kelvin engine installed + signed in + VSpeed Turbo enabled (card above). Takes ~5–12 minutes; don't use the PC for gaming meanwhile.");
     if (!ok) return;
     setRunning(true); setProg({ step: 0, totalSteps: 3, message: "Starting…" });
     const r = await api.startBenchmark(instance.id).catch(e => ({ ok: false, error: String(e) }));
@@ -125,7 +125,7 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
       React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Auto-Benchmark — Default vs Turbo"),
       React.createElement("span", { style: { marginLeft: "auto", fontSize: 10.5, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--acc-text)", background: "var(--acc-soft)", border: "1px solid var(--acc-soft-2)", borderRadius: 999, padding: "3px 9px" } }, "automatic")),
     React.createElement("p", { style: { margin: "0 0 16px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "One click proves the speed-up on YOUR pack: Default launch → Turbo training (only if the AOT cache isn't built yet) → Turbo measured. Cryo launches the game, detects the main menu, records the time and closes it. 2–3 launches, ~5–12 min, no world entry needed. Enable VSpeed Turbo above first."),
+      "One click proves the speed-up on YOUR pack: Default launch → Turbo training (only if the AOT cache isn't built yet) → Turbo measured. Kelvin launches the game, detects the main menu, records the time and closes it. 2–3 launches, ~5–12 min, no world entry needed. Enable VSpeed Turbo above first."),
 
     running
       ? React.createElement("div", null,
@@ -158,7 +158,7 @@ function BenchmarkCard({ instance, api, hasBridge, t, fmt }) {
       React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Benchmark — data load (world entry)"),
       hasBridge && React.createElement(Btn, { variant: "ghost", size: "sm", icon: "refresh", style: { marginLeft: "auto" }, onClick: refresh }, "Refresh")),
     React.createElement("p", { style: { margin: "0 0 16px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "Launch each mode and enter a world once. The mod measures how long recipes + advancements take to load, and Cryo compares them. (This is what VSpeed accelerates — not the boot-to-menu time.)"),
+      "Launch each mode and enter a world once. The mod measures how long recipes + advancements take to load, and Kelvin compares them. (This is what VSpeed accelerates — not the boot-to-menu time.)"),
 
     // launch buttons
     React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 } },
@@ -329,7 +329,7 @@ function TurboCard({ instance, api, hasBridge }) {
     st && !st.supported && React.createElement("div", { style: { padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)" } },
       "This pack is on Minecraft " + (instance.mc || "< 1.20.5") + " — Turbo needs a Java-21-era pack (MC 1.20.5+)."),
     st && st.supported && !st.engineInstalled && React.createElement("div", { style: { padding: "10px 14px", borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)" } },
-      "Turbo launches through the Cryo engine — install it in the \"Cryo engine\" card below first."),
+      "Turbo launches through the Kelvin engine — install it in the \"Kelvin engine\" card below first."),
 
     // runtime download progress
     dl && React.createElement("div", { style: { margin: "6px 0 12px" } },
@@ -628,7 +628,7 @@ function SpeedBoostersCard({ instance, api, hasBridge }) {
 
   async function excludeDefender() {
     const ok = window.confirm(
-      "Exclude this instance and Cryo's game files from Windows Defender real-time scanning?\n\n" +
+      "Exclude this instance and Kelvin's game files from Windows Defender real-time scanning?\n\n" +
       "Defender re-scans hundreds of mod jars on EVERY launch — on big packs that's a large share of boot time. " +
       "Excluding these folders skips that. Only install mods from sources you trust (Modrinth / CurseForge).\n\n" +
       "Windows will show an administrator permission prompt — click Yes there.");
@@ -666,7 +666,7 @@ function SpeedBoostersCard({ instance, api, hasBridge }) {
       React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Speed boosters")),
 
     row("Windows Defender exclusion",
-        "Skips real-time scanning of this instance's mods + Cryo's game files on every launch — often 20–40% of the mod-scan phase on big packs.",
+        "Skips real-time scanning of this instance's mods + Kelvin's game files on every launch — often 20–40% of the mod-scan phase on big packs.",
         st && st.defenderExcluded
           ? React.createElement(Badge, { tone: "success", dot: true }, "excluded")
           : React.createElement(Btn, { variant: "outline", size: "sm", icon: busyDef ? "loader" : "shield", iconSpin: busyDef, disabled: busyDef || !st, onClick: excludeDefender },
@@ -679,7 +679,7 @@ function SpeedBoostersCard({ instance, api, hasBridge }) {
         React.createElement(Toggle, { checked: !!(st && st.dynamicResources), disabled: !st || !st.modernfixInstalled, onChange: toggleDynRes })),
 
     React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", paddingTop: 10 } },
-      "Cryo also pre-warms your mods and libraries into the OS file cache on every launch — automatic, nothing to configure."));
+      "Kelvin also pre-warms your mods and libraries into the OS file cache on every launch — automatic, nothing to configure."));
 }
 
 /* ============ CRYO ENGINE CARD ============ */
@@ -782,7 +782,7 @@ function EngineCard({ instance, api, hasBridge }) {
       React.createElement("div", { style: { width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: "var(--acc-soft)", border: "1px solid var(--acc-soft-2)", color: "var(--acc-text)" } },
         React.createElement(Icon, { name: "cpu", size: 20 })),
       React.createElement("div", { style: { flex: 1 } },
-        React.createElement("div", { style: { fontSize: 15, fontWeight: 680 } }, "Cryo Engine"),
+        React.createElement("div", { style: { fontSize: 15, fontWeight: 680 } }, "Kelvin Engine"),
         React.createElement("div", { style: { fontSize: 12, color: "var(--text-faint)", marginTop: 1 } },
           "Launch without Prism · CmlLib.Core " + (status.loader || "Unknown") + " " + (status.loaderVer || ""))),
       status.installed
@@ -854,13 +854,13 @@ function EngineCard({ instance, api, hasBridge }) {
       React.createElement("div", { style: { flex: 1 } },
         React.createElement("div", { style: { fontSize: 13, fontWeight: 680, color: isCryo ? "var(--acc-text)" : "var(--text)" } }, isCryo ? "Engine is the default launcher" : "Use engine as default launcher"),
         React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 } },
-          isCryo ? "The Launch button uses Cryo Engine (no Prism needed)." : "Enable to make Launch use Cryo Engine instead of Prism.")),
+          isCryo ? "The Launch button uses Kelvin Engine (no Prism needed)." : "Enable to make Launch use Kelvin Engine instead of Prism.")),
       React.createElement(Toggle, {
         checked: isCryo, disabled: busy || toggling,
         onChange: async (val) => {
           setTog(true);
           const r = await api.setEngineSource(instance.id, val ? "cryo" : "prism").catch(() => null);
-          if (r && r.ok) { await loadStatus(); window.toast({ tone: val ? "success" : "neutral", icon: val ? "zap" : "package", title: val ? "Cryo Engine enabled" : "Prism mode restored", body: val ? "Launch button now uses engine directly." : "Launch button now uses Prism." }); }
+          if (r && r.ok) { await loadStatus(); window.toast({ tone: val ? "success" : "neutral", icon: val ? "zap" : "package", title: val ? "Kelvin Engine enabled" : "Prism mode restored", body: val ? "Launch button now uses engine directly." : "Launch button now uses Prism." }); }
           setTog(false);
         },
       }),
@@ -868,7 +868,7 @@ function EngineCard({ instance, api, hasBridge }) {
 
     // Footer note
     React.createElement("p", { style: { margin: "12px 0 0", fontSize: 11.5, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "Uses the same mods/config/saves folder as Prism but without PrismLauncher itself. NeoForge libraries are downloaded once to the shared Cryo game root."),
+      "Uses the same mods/config/saves folder as Prism but without PrismLauncher itself. NeoForge libraries are downloaded once to the shared Kelvin game root."),
   );
 }
 
@@ -944,7 +944,7 @@ function CrashBisectorCard({ instance, api, hasBridge }) {
   async function start() {
     const ok = window.confirm(
       "Find the broken mod automatically?\n\n" +
-      "Cryo will boot \"" + (instance.name || instance.id) + "\" up to ~10 times, disabling half the remaining " +
+      "Kelvin will boot \"" + (instance.name || instance.id) + "\" up to ~10 times, disabling half the remaining " +
       "suspects each round, until one mod is isolated. On a big pack this takes 15–40 minutes — leave the PC alone while it runs.\n\n" +
       "Use this ONLY for crashes that happen during STARTUP (before the main menu). All mods are restored afterwards; " +
       "the culprit is disabled the standard way (re-enable it in the Mods tab).");
@@ -1535,7 +1535,7 @@ function ModsTab({ instance, mods: mods0, t, fmt, api, hasBridge, onModsChanged 
     if (!hasBridge) { window.toast({ tone: "warn", icon: "info", title: "Desktop only" }); return; }
     const ok = window.confirm(
       "Safe update \"" + (instance.name || instance.id) + "\"?\n\n" +
-      "Cryo will: snapshot your current mods → install every available update → launch the pack ONCE to verify it still " +
+      "Kelvin will: snapshot your current mods → install every available update → launch the pack ONCE to verify it still " +
       "boots → and roll everything back automatically if it crashes. Takes a few minutes (one full game boot).\n\n" +
       "The snapshot is kept afterwards, so you can also roll back manually any time until the next update.");
     if (!ok) return;
@@ -1825,7 +1825,7 @@ function SettingsTab({ instance, t, fmt, api, hasBridge }) {
     }
   }, [instance.id, hasBridge]);
 
-  // Discover installed Javas (Cryo bundled, Prism, vendor dirs, JAVA_HOME, PATH).
+  // Discover installed Javas (Kelvin bundled, Prism, vendor dirs, JAVA_HOME, PATH).
   // fill=true also writes the recommended path into the field (Auto-detect button).
   async function detectJava(fill) {
     if (!hasBridge || !api.detectJavas) return;
@@ -1840,7 +1840,7 @@ function SettingsTab({ instance, t, fmt, api, hasBridge }) {
         setJavaPath(p); setDirty(true);
         if (window.toast) window.toast(p
           ? { tone: "success", icon: "check", title: "Java auto-detected", body: "Java " + ((r && r.requiredMajor) || "?") + " · " + p }
-          : { tone: "info", icon: "info", title: "Auto Java", body: "Cryo will download Java " + ((r && r.requiredMajor) || "?") + " on launch." });
+          : { tone: "info", icon: "info", title: "Auto Java", body: "Kelvin will download Java " + ((r && r.requiredMajor) || "?") + " on launch." });
       }
     } catch (e) {
       if (window.toast) window.toast({ tone: "error", icon: "alert", title: "Java detection failed", body: e.message });
@@ -1961,7 +1961,7 @@ function SettingsTab({ instance, t, fmt, api, hasBridge }) {
                 options: [{ value: "", label: "Auto" + (recPath ? "" : " (download on launch)") }].concat(
                   javas.map(j => ({ value: j.path, label: (j.recommended ? "★ " : "") + "Java " + j.major + (j.vendor ? " · " + j.vendor : "") + (j.version ? " (" + j.version + ")" : "") }))) })),
             (javas && javas.length === 0) && React.createElement("span", { style: { fontSize: 11.5, color: "var(--text-faint)" } },
-              "No Java found on disk — Cryo will download Java " + (reqMajor || "?") + " automatically on launch."))),
+              "No Java found on disk — Kelvin will download Java " + (reqMajor || "?") + " automatically on launch."))),
         React.createElement(LabeledRow, { label: t("set.window") },
           React.createElement(Select, { value: res, onChange: setRes, width: 200, size: "sm",
             options: ["1280×720", "1600×900", "1920×1080", "2560×1440", "Fullscreen"] })),
@@ -2314,7 +2314,7 @@ function ProfileApplyCard({ instance, api, hasBridge }) {
 
 /* ============ MODPACK UPDATE (used in instance SettingsTab) ============ */
 function ModpackUpdateCard({ instance, api, hasBridge }) {
-  const [info, setInfo] = tS(null);     // null=loading; {hasSource:false} = not a Cryo-installed pack
+  const [info, setInfo] = tS(null);     // null=loading; {hasSource:false} = not a Kelvin-installed pack
   const [busy, setBusy] = tS(false);
   const startedRef = tRf(false);
 
@@ -2860,7 +2860,7 @@ function HostServerTab({ instance, api, hasBridge }) {
       React.createElement(Icon, { name: "server", size: 18, style: { color: "var(--acc-2)" } }),
       React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680 } }, "Host a server")),
     React.createElement("p", { style: { margin: "10px 0 0", fontSize: 13, color: "var(--text-dim)", lineHeight: 1.55 } },
-      (srv.loader || "This loader") + " server hosting is coming soon. Cryo can currently host NeoForge, Fabric and Vanilla packs."));
+      (srv.loader || "This loader") + " server hosting is coming soon. Kelvin can currently host NeoForge, Fabric and Vanilla packs."));
 
   const consoleCard = React.createElement(ServerConsole, {
     lines, running, busy, setupMsg,
@@ -2876,7 +2876,7 @@ function HostServerTab({ instance, api, hasBridge }) {
         busy && React.createElement(Badge, { tone: "warn", size: "sm" }, "Setting up…")),
       React.createElement("p", { style: { margin: "10px 0 14px", fontSize: 13, color: "var(--text-dim)", lineHeight: 1.55 } },
         "Create a dedicated server for ", React.createElement("strong", null, instance.name),
-        " — Cryo copies this pack's mods + config and installs the matching ",
+        " — Kelvin copies this pack's mods + config and installs the matching ",
         React.createElement("strong", null, (instance.loader || "Vanilla") + " " + (instance.mc || "")),
         " server, with its own console."),
       React.createElement(Btn, { variant: "primary", icon: busy ? "loader" : "server", iconSpin: busy, disabled: busy, onClick: setup },

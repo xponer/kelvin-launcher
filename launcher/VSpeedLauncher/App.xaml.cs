@@ -30,10 +30,10 @@ public partial class App : Application
         if (!firstInstance)
         {
             MessageBox.Show(
-                "Cryo Launcher is already running.\n\n" +
+                "Kelvin is already running.\n\n" +
                 "Look for its icon in the system tray (bottom-right corner) " +
                 "— double-click it to open the main window.",
-                "Cryo", MessageBoxButton.OK, MessageBoxImage.Information);
+                "Kelvin", MessageBoxButton.OK, MessageBoxImage.Information);
             Shutdown();
             return;
         }
@@ -48,7 +48,7 @@ public partial class App : Application
         var historyPath = Path.Combine(dataDir, "history.json");
 
         Logger.Init(logPath);
-        Logger.Info("Cryo Launcher starting.");
+        Logger.Info("Kelvin starting.");
 
         Config  = new ConfigStore(configPath);
         Config.Load();
@@ -64,7 +64,7 @@ public partial class App : Application
             if (Config.Data.NotifyLaunchDone)
             {
                 var name = Manager.FindById(instanceId)?.Entry.DisplayName ?? instanceId;
-                Tray?.Notify("Cryo — game ready", $"{name} reached the main menu in {loadSeconds}s");
+                Tray?.Notify("Kelvin — game ready", $"{name} reached the main menu in {loadSeconds}s");
             }
         };
 

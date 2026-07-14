@@ -5,24 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- Content-Security-Policy — lock the surface to exactly what the app needs.
-       Scripts are first-party ONLY ('self': vendored React + the app's own files) — no
-       inline script, no eval, no third-party script origin. Styles/fonts allow the Geist
-       CSS on jsdelivr; images allow https + data: (modpack art, base64 thumbnails).
+       Fully first-party now: vendored React, vendored IBM Plex fonts, own styles.
+       No CDN of any kind. Images allow https + data: (modpack art, base64 thumbnails).
        Everything else is denied: no iframes, plugins, workers, form posts, <base> hijack,
        or cross-origin connections (data exfiltration). -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; media-src 'none'; worker-src 'none'; manifest-src 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; media-src 'none'; worker-src 'none'; manifest-src 'none'" />
 
-  <title>Cryo — Modpack Launcher</title>
-  <!-- Inline SVG favicon (brand snowflake) — avoids a 404 for /favicon.ico; data: is allowed by img-src. -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237AA2FF' stroke-width='1.5' stroke-linecap='round'%3E%3Cpath d='M12 2L12 22M2 12L22 12M4.9 4.9L19.1 19.1M19.1 4.9L4.9 19.1'/%3E%3C/svg%3E" />
-
-  <!-- Geist (sans + mono) via fontsource CDN -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/400.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/500.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/600.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/700.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.0.3/400.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.0.3/500.css" />
+  <title>Kelvin — Minecraft launcher</title>
+  <!-- Inline SVG favicon: the Kelvin mark (angular K in a gauge frame). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='3' fill='%23161B1F' stroke='%2335B8CB' stroke-width='1.6'/%3E%3Cpath d='M8 6v12M8 12l7-6M8 12l7 6' fill='none' stroke='%2335B8CB' stroke-width='2.2' stroke-linecap='square'/%3E%3C/svg%3E" />
 
   <link rel="stylesheet" href="src/styles.css" />
 
@@ -30,24 +21,22 @@
        by store.js once the initial data has loaded — same surface as the app, so
        there's no black gap between the splash and the rendered launcher. -->
   <style>
-    html, body { margin: 0; background: #070910; }
+    html, body { margin: 0; background: #101315; }
     #cryo-splash {
       position: fixed; inset: 0; z-index: 99999;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      background: radial-gradient(62% 62% at 50% 42%, #16182A 0%, #0A0C14 62%, #070910 100%);
+      background: #101315;
       transition: opacity .4s ease; opacity: 1;
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     }
     #cryo-splash.cryo-hide { opacity: 0; pointer-events: none; }
-    /* Static logo (no transform animation — SVG rotation rasterises on the main
-       thread; the GPU-composited ring below carries the motion instead). */
-    #cryo-splash .cs-flake { width: 80px; height: 80px; opacity: .95; }
-    #cryo-splash .cs-name { margin-top: 16px; font-size: 27px; font-weight: 700; color: #ECECF1; letter-spacing: -.5px; }
-    #cryo-splash .cs-sub  { margin-top: 5px; font-size: 12.5px; color: #8A90A8; }
+    #cryo-splash .cs-flake { width: 72px; height: 72px; }
+    #cryo-splash .cs-name { margin-top: 18px; font-size: 24px; font-weight: 600; color: #E4EAEC; letter-spacing: .16em; }
+    #cryo-splash .cs-sub  { margin-top: 6px; font-size: 11px; color: #5C6B72; letter-spacing: .14em; text-transform: uppercase; font-family: Consolas, monospace; }
     /* GPU-composited spinner — stays smooth even while the main thread is busy. */
     #cryo-splash .cs-spin {
-      margin-top: 22px; width: 30px; height: 30px;
-      border: 3px solid rgba(120,140,200,.16); border-top-color: #7AA2FF; border-radius: 50%;
+      margin-top: 24px; width: 26px; height: 26px;
+      border: 2px solid #262E34; border-top-color: #35B8CB; border-radius: 50%;
       animation: cs-rot .8s linear infinite; will-change: transform;
     }
     @keyframes cs-rot { to { transform: rotate(360deg); } }
@@ -62,17 +51,12 @@
 </head>
 <body>
   <div id="cryo-splash">
-    <svg class="cs-flake" viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round">
-      <defs>
-        <linearGradient id="cs-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#63B3FF" />
-          <stop offset="1" stop-color="#A06BFF" />
-        </linearGradient>
-      </defs>
-      <path d="M12 2 L12 22 M2 12 L22 12 M4.9 4.9 L19.1 19.1 M19.1 4.9 L4.9 19.1" stroke="url(#cs-grad)" />
+    <svg class="cs-flake" viewBox="0 0 24 24">
+      <rect x="2" y="2" width="20" height="20" rx="3" fill="#161B1F" stroke="#35B8CB" stroke-width="1.4" />
+      <path d="M8 6v12M8 12l7-6M8 12l7 6" fill="none" stroke="#35B8CB" stroke-width="2" stroke-linecap="square" />
     </svg>
-    <div class="cs-name">Cryo</div>
-    <div class="cs-sub">loading…</div>
+    <div class="cs-name">KELVIN</div>
+    <div class="cs-sub">cold start in progress</div>
     <div class="cs-spin"></div>
   </div>
   <div id="root"></div>

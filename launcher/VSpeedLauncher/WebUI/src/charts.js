@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — lightweight responsive SVG charts
+   Kelvin — lightweight responsive SVG charts
    (LineArea trend, StackedBars phase breakdown, CompareBars)
    ============================================================ */
 const { useState: cS, useEffect: cE, useRef: cR, useMemo: cMm } = React;

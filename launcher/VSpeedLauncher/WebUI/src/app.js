@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo - app shell: titlebar, sidebar, background, router
+   Kelvin - app shell: titlebar, sidebar, background, router
    ============================================================ */
 const { useState: aS, useEffect: aE, useRef: aR } = React;
 var { useApp, useT } = window.CryoStore;
@@ -53,21 +53,13 @@ function ParticleField({ active }) {
   return React.createElement("canvas", { ref, style: { position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" } });
 }
 
-/* Ambient snowfall — a quiet nod to "Cryo". Sits behind the content (shows through
-   the frosted-glass panels) and is hidden when the animations toggle is off. */
-function SnowField() {
-  const flakes = React.useMemo(() => Array.from({ length: 16 }).map(() => ({
-    left: Math.random() * 100,
-    size: 2 + Math.random() * 3.5,
-    dur: 10 + Math.random() * 12,
-    delay: -Math.random() * 22,
-    dx: Math.round(Math.random() * 50 - 25),
-  })), []);
-  return React.createElement("div", { className: "cryo-snow", "aria-hidden": true },
-    flakes.map((f, i) => React.createElement("span", {
-      key: i,
-      style: { left: f.left + "%", width: f.size, height: f.size, animationDuration: f.dur + "s", animationDelay: f.delay + "s", "--dx": f.dx + "px" },
-    })));
+/* The Kelvin mark: angular K in a gauge frame. Inline SVG so it always
+   matches the current accent. (The old ambient snowfall is gone — an
+   instrument doesn't decorate itself.) */
+function KelvinMark({ size = 34 }) {
+  return React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", "aria-hidden": true },
+    React.createElement("rect", { x: 1.5, y: 1.5, width: 21, height: 21, rx: 3, fill: "var(--panel-solid)", stroke: "var(--acc-2)", strokeWidth: 1.6 }),
+    React.createElement("path", { d: "M8 6v12M8 12l7-6M8 12l7 6", fill: "none", stroke: "var(--acc-2)", strokeWidth: 2.2, strokeLinecap: "square" }));
 }
 
 function Background({ bg }) {
@@ -207,22 +199,16 @@ function Titlebar({ title, onSpotlight }) {
     },
   },
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } },
-      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "var(--text-dim)" } }, "Cryo"),
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "var(--text-dim)" } }, "Kelvin"),
       React.createElement(Icon, { name: "chevronRight", size: 13, style: { color: "var(--text-faint)" } }),
       React.createElement("span", { style: { fontSize: 13, fontWeight: 650, color: "var(--text)" } }, title),
     ),
     React.createElement("div", { style: { flex: 1 } }),
     React.createElement("div", { className: "no-drag", style: { display: "flex", alignItems: "center", gap: 6 } },
-      /* spotlight search button */
+      /* spotlight search — icon only, the shortcut is in the tooltip */
       React.createElement(Tip, { label: "Search  (Ctrl+K)", side: "bottom" },
-        React.createElement("button", {
-          onClick: onSpotlight, className: "no-drag",
-          style: { display: "flex", alignItems: "center", gap: 8, height: 30, padding: "0 10px", borderRadius: "var(--r-md)", border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text-faint)", fontSize: 12.5, cursor: "pointer" },
-        },
-          React.createElement(Icon, { name: "search", size: 14 }),
-          React.createElement("span", null, "Search"),
-          React.createElement("kbd", { className: "mono", style: { marginLeft: 6, padding: "1px 6px", borderRadius: 4, background: "var(--panel-hi)", border: "1px solid var(--border-strong)", fontSize: 10, color: "var(--text-faint)" } }, "Ctrl K"),
-        )),
+        React.createElement(Btn, { variant: "ghost", size: "icon", onClick: onSpotlight, className: "no-drag" },
+          React.createElement(Icon, { name: "search", size: 15 }))),
       React.createElement(VSpeedChip, null),
       React.createElement("div", { style: { width: 1, height: 20, background: "var(--border)", margin: "0 2px" } }),
       React.createElement(AccountChip, null),
@@ -249,31 +235,30 @@ function Sidebar() {
   ];
   const activeName = route.name === "instance" ? "library" : route.name;
   return React.createElement("div", {
-    className: "glass-2",
-    style: { width: 232, flexShrink: 0, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", padding: 14, zIndex: 10, position: "relative" },
+    style: { width: 204, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--bg-1)", display: "flex", flexDirection: "column", padding: "12px 0", zIndex: 10, position: "relative" },
   },
-    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 11, padding: "8px 8px 18px" } },
-      React.createElement("div", { style: { width: 34, height: 34, borderRadius: 10, background: "var(--acc-grad)", display: "grid", placeItems: "center", color: "var(--acc-ink)", boxShadow: "0 6px 18px -8px var(--acc-glow)" } },
-        React.createElement(Icon, { name: "snowflake", size: 19 })),
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 11, padding: "6px 14px 16px" } },
+      React.createElement(KelvinMark, { size: 32 }),
       React.createElement("div", null,
-        React.createElement("div", { style: { fontSize: 16, fontWeight: 740, letterSpacing: "-0.01em", lineHeight: 1 } }, "Cryo"),
-        React.createElement("div", { style: { fontSize: 10, color: "var(--text-faint)", marginTop: 3, fontWeight: 500 } }, "VSpeed engine")),
+        React.createElement("div", { style: { fontSize: 15, fontWeight: 650, letterSpacing: "0.14em", lineHeight: 1 } }, "KELVIN"),
+        React.createElement("div", { className: "stencil", style: { marginTop: 4 } }, "cold-start launcher")),
     ),
-    React.createElement("nav", { style: { display: "flex", flexDirection: "column", gap: 3 } },
+    React.createElement("nav", { style: { display: "flex", flexDirection: "column", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" } },
       items.map(([name, icon, key]) => {
         const active = activeName === name;
         return React.createElement("button", {
-          key: name, onClick: () => navigate(name), className: "no-drag",
+          key: name, onClick: () => navigate(name), className: "no-drag mono",
           style: {
-            display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: "var(--r-md)", border: "none", textAlign: "left",
-            background: active ? "var(--acc-soft)" : "transparent", color: active ? "var(--acc-text)" : "var(--text-dim)",
-            fontSize: 13.5, fontWeight: active ? 650 : 550, position: "relative", transition: "background .18s, color .18s",
+            display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", border: "none", textAlign: "left",
+            background: active ? "var(--panel-hi)" : "transparent", color: active ? "var(--text)" : "var(--text-faint)",
+            fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase",
+            position: "relative", transition: "background .12s, color .12s",
+            borderLeft: active ? "2px solid var(--acc-2)" : "2px solid transparent",
           },
-          onMouseEnter: e => { if (!active) e.currentTarget.style.background = "var(--panel-2)"; },
-          onMouseLeave: e => { if (!active) e.currentTarget.style.background = "transparent"; },
+          onMouseEnter: e => { if (!active) { e.currentTarget.style.background = "var(--panel-2)"; e.currentTarget.style.color = "var(--text-dim)"; } },
+          onMouseLeave: e => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-faint)"; } },
         },
-          active && React.createElement("span", { style: { position: "absolute", left: 0, top: 9, bottom: 9, width: 3, borderRadius: 3, background: "var(--acc-grad)" } }),
-          React.createElement(Icon, { name: icon, size: 18 }), t(key));
+          React.createElement(Icon, { name: icon, size: 15 }), t(key));
       }),
     ),
     React.createElement("div", { style: { flex: 1 } }),
@@ -285,17 +270,17 @@ function StatusWidget() {
   const { t, api, hasBridge } = useApp();
   const [ver, setVer] = aS("1.0.0");
   aE(() => { if (hasBridge && api.getAppVersion) api.getAppVersion().then(v => v && v.version && setVer(v.version)).catch(() => {}); }, [hasBridge]);
+  // Bottom-of-rail readout: plain telemetry lines, like the footer of a scope.
   return React.createElement("div", {
-    style: { borderRadius: "var(--r-lg)", padding: 12, background: "var(--panel-2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 9 },
+    style: { borderTop: "1px solid var(--border)", padding: "10px 14px 2px", display: "flex", flexDirection: "column", gap: 7 },
   },
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-      React.createElement("span", { style: { width: 7, height: 7, borderRadius: 99, background: "var(--success)", boxShadow: "0 0 8px var(--success)" } }),
-      React.createElement("span", { style: { fontSize: 11.5, fontWeight: 600, color: "var(--text)" } }, t("status.javaOk")),
+      React.createElement("span", { style: { width: 6, height: 6, borderRadius: 1, background: "var(--success)" } }),
+      React.createElement("span", { className: "mono", style: { fontSize: 10.5, color: "var(--text-dim)" } }, t("status.javaOk")),
       React.createElement("span", { className: "mono", style: { fontSize: 10.5, color: "var(--text-faint)", marginLeft: "auto" } }, "21")),
-    React.createElement("div", { className: "hr" }),
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-      React.createElement(Icon, { name: "zap", size: 13, style: { color: "var(--acc-2)" } }),
-      React.createElement("span", { style: { fontSize: 11, color: "var(--text-dim)" } }, t("status.engine")),
+      React.createElement("span", { style: { width: 6, height: 6, borderRadius: 1, background: "var(--acc-2)" } }),
+      React.createElement("span", { className: "mono", style: { fontSize: 10.5, color: "var(--text-dim)" } }, t("status.engine")),
       React.createElement("span", { className: "mono", style: { fontSize: 10.5, color: "var(--text-faint)", marginLeft: "auto" } }, "v" + ver)),
   );
 }
@@ -378,7 +363,6 @@ function Shell() {
 
   return React.createElement("div", { style: { height: "100%", display: "flex", flexDirection: "column", position: "relative", background: "var(--bg-0)" } },
     React.createElement(Background, { bg: settings.bg }),
-    React.createElement(SnowField, null),
     React.createElement(Titlebar, { title: titleFor(route, t), onSpotlight: () => setSpotlight(true) }),
     React.createElement("div", { style: { flex: 1, display: "flex", minHeight: 0, position: "relative", zIndex: 5 } },
       React.createElement(Sidebar, null),

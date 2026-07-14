@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo - Dashboard: REAL aggregate data from the bridge
+   Kelvin - Dashboard: REAL aggregate data from the bridge
    (instances + cache sizes + launch history + benchmark results)
    ============================================================ */
 const { useState: hS, useEffect: hE, useMemo: hM } = React;

@@ -85,7 +85,7 @@ public sealed class DiscordRpc : IDisposable
                 {
                     ["details"] = Trunc(details, 128),
                     ["state"]   = Trunc(state, 128),
-                    ["assets"]  = new JsonObject { ["large_image"] = "cryo", ["large_text"] = "Cryo Launcher" },
+                    ["assets"]  = new JsonObject { ["large_image"] = "cryo", ["large_text"] = "Kelvin" },
                 };
                 if (withTimer)
                     activity["timestamps"] = new JsonObject { ["start"] = _startEpoch };

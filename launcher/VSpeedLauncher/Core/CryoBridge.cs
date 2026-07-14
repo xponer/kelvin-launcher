@@ -2096,7 +2096,7 @@ public sealed partial class CryoBridge
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(120) };
 
     private const string AiSystemPrompt =
-@"You are Cryo Assistant, a senior Minecraft modpack engineer built into the Cryo launcher. You know NeoForge, Forge, Fabric and Quilt deeply. Be concise, concrete and evidence-based — short paragraphs and bullets.
+@"You are Kelvin Assistant, a senior Minecraft modpack engineer built into the Kelvin launcher. You know NeoForge, Forge, Fabric and Quilt deeply. Be concise, concrete and evidence-based — short paragraphs and bullets.
 
 # How modded Minecraft REALLY behaves (read this before judging anything)
 - A normal, healthy modded pack prints HUNDREDS of scary-looking but HARMLESS lines on every boot: mixin ""could not find""/""already applied"" notices, ""Mod X is missing a pack.mcmeta"", missing-OPTIONAL-dependency notices, datapack/recipe/tag warnings, deprecation warnings, registry remap/""Unknown registry"" messages, ""failed to load … falling back"", and full Java stack traces the game catches and continues past. This is NOISE, not failure.
@@ -3093,7 +3093,7 @@ Example for an unknown error:
                     ["loader"]     = meta.Loader,
                     ["loaderVer"]  = meta.LoaderVer,
                     ["exportedAt"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    ["exportedBy"] = "Cryo Launcher",
+                    ["exportedBy"] = "Kelvin Launcher",
                 };
                 var entry = zip.CreateEntry("cryo-modpack.json");
                 using var sw = new StreamWriter(entry.Open());
@@ -4966,7 +4966,7 @@ Example for an unknown error:
         }
 
         // 1) Cryo's own bundled Mojang runtimes (self-contained, preferred).
-        ScanContainer(Path.Combine(EngineRoot, "runtime", "windows-x64"), "Cryo bundled");
+        ScanContainer(Path.Combine(EngineRoot, "runtime", "windows-x64"), "Kelvin bundled");
         // 2) PrismLauncher's runtimes (the user very likely already has these).
         var appdata = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         ScanContainer(Path.Combine(appdata, "PrismLauncher", "java"), "Prism");

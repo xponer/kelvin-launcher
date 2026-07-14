@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — global Settings: appearance, java, cache, hotkeys,
+   Kelvin — global Settings: appearance, java, cache, hotkeys,
    notifications, about. Heavy on customization.
    ============================================================ */
 const { useState: sgS, useMemo: sgM, useEffect: sgE } = React;
@@ -262,7 +262,7 @@ function AccountSection({ t, api, hasBridge }) {
   }, [hasBridge]);
   async function login() {
     setBusy(true);
-    window.toast({ tone: "neutral", icon: "globe", title: "Microsoft sign-in", body: "A Microsoft login page will open — sign in there. Cryo never sees your password." });
+    window.toast({ tone: "neutral", icon: "globe", title: "Microsoft sign-in", body: "A Microsoft login page will open — sign in there. Kelvin never sees your password." });
     const r = await api.accountLogin().catch(() => ({ ok: false }));
     if (r && r.ok === false) setBusy(false);
   }
@@ -334,7 +334,7 @@ function DiagnosticsSection({ t, api, hasBridge }) {
 
   return React.createElement(SectionCard, { id: "diagnostics", icon: "gauge", title: t("cfg.diagnostics") },
     React.createElement("p", { style: { margin: "0 0 12px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "Cryo checks its own health — config, paths, WebView2, RAM sanity, VSpeed mod, disk and recent launcher errors — and offers 1-click fixes."),
+      "Kelvin checks its own health — config, paths, WebView2, RAM sanity, VSpeed mod, disk and recent launcher errors — and offers 1-click fixes."),
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14, marginBottom: res ? 14 : 0 } },
       React.createElement(Btn, { variant: "primary", icon: running ? "refresh" : "gauge", iconSpin: running, disabled: running || !hasBridge, onClick: runCheck }, running ? "Checking…" : "Run Self-Check"),
       res && React.createElement("div", { style: { display: "flex", gap: 12, fontSize: 12.5, fontWeight: 650 } },
@@ -352,7 +352,7 @@ function DiagnosticsSection({ t, api, hasBridge }) {
     React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" } },
       React.createElement("div", { style: { flex: 1, minWidth: 200 } },
         React.createElement("div", { style: { fontSize: 13, fontWeight: 650 } }, "Standalone engine (beta)"),
-        React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)" } }, "Install + launch Minecraft 1.21.1 (offline) with the new built-in engine — proves Cryo can run without Prism.")),
+        React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)" } }, "Install + launch Minecraft 1.21.1 (offline) with the new built-in engine — proves Kelvin can run without Prism.")),
       React.createElement(Btn, { variant: "outline", size: "sm", icon: (engine && engine.running) ? "refresh" : "play", iconSpin: !!(engine && engine.running), disabled: !hasBridge || !!(engine && engine.running), onClick: testEngine }, "Test engine")),
     engine && React.createElement("div", { style: { marginTop: 8, fontSize: 12, color: engine.err ? "var(--danger, #ff6b6b)" : engine.done ? "var(--success)" : "var(--text-dim)", wordBreak: "break-word" } }, engine.msg),
   );
@@ -452,7 +452,7 @@ function AssistantSection({ t, api, hasBridge }) {
 
 function AboutSection({ t, api, hasBridge }) {
   const open = url => api.openUrl ? api.openUrl(url) : window.open(url, "_blank");
-  const REPO = "https://github.com/xponer/vspeed-cryoLauncher";
+  const REPO = "https://github.com/xponer/kelvin-launcher";
   const [ver, setVer] = sgS({ version: "1.0.0", installed: false });
   const [checking, setChecking] = sgS(false);
   const [upd, setUpd] = sgS(null);       // { available, version } | null
@@ -490,7 +490,7 @@ function AboutSection({ t, api, hasBridge }) {
       React.createElement("div", { style: { width: 52, height: 52, borderRadius: 14, background: "var(--acc-grad)", display: "grid", placeItems: "center", color: "var(--acc-ink)", boxShadow: "0 8px 24px -10px var(--acc-glow)" } },
         React.createElement(Icon, { name: "snowflake", size: 28 })),
       React.createElement("div", null,
-        React.createElement("div", { style: { fontSize: 18, fontWeight: 740, letterSpacing: "-0.01em" } }, "Cryo"),
+        React.createElement("div", { style: { fontSize: 18, fontWeight: 740, letterSpacing: "-0.01em" } }, "Kelvin"),
         React.createElement("div", { style: { fontSize: 12.5, color: "var(--text-dim)" } }, t("app.tagline"))),
     ),
     React.createElement(Row, { label: t("cfg.version"), desc: ver.installed ? "Installed build" : "Dev build (run from source)" },
@@ -618,7 +618,7 @@ function InstanceLocationsSection({ t, api, hasBridge }) {
   }
   async function remove(path) {
     if (!hasBridge) return;
-    if (!window.confirm("Remove this location from Cryo?\n\nThe folder and its files are NOT deleted — its instances just stop showing here.")) return;
+    if (!window.confirm("Remove this location from Kelvin?\n\nThe folder and its files are NOT deleted — its instances just stop showing here.")) return;
     const r = await api.removeInstanceRoot(path).catch(() => null);
     if (r && r.ok) { load(); window.toast({ tone: "neutral", icon: "trash", title: "Location removed" }); }
   }
@@ -629,7 +629,7 @@ function InstanceLocationsSection({ t, api, hasBridge }) {
 
   return React.createElement(SectionCard, { id: "instances", icon: "folder", title: t("cfg.instances") },
     React.createElement("p", { style: { margin: "0 0 12px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
-      "Folders Cryo scans for instances. Each is a Prism-style folder that contains an \"instances\" subfolder. Add another to keep packs on a different drive — when you install a modpack and have more than one, Cryo asks where to put it."),
+      "Folders Kelvin scans for instances. Each is a Prism-style folder that contains an \"instances\" subfolder. Add another to keep packs on a different drive — when you install a modpack and have more than one, Kelvin asks where to put it."),
     !hasBridge && React.createElement("div", { style: { fontSize: 12.5, color: "var(--text-dim)" } }, "Available in the desktop launcher."),
     hasBridge && React.createElement(React.Fragment, null,
       React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 } },

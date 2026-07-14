@@ -1,4 +1,4 @@
-# CLAUDE.md — Cryo Launcher
+# CLAUDE.md — Kelvin (formerly Cryo Launcher)
 
 > Project context for Claude Code sessions. **Read this first.**
 > When you fix or add something, append it to the **Changelog** at the bottom so
@@ -110,6 +110,40 @@
 > Newest at the top. Mark whether something is **released** (in a GitHub
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
+
+### v1.1.0 — unreleased — REBRAND: Cryo → Kelvin + full "instrument panel" redesign
+- **New name: Kelvin** (unit of absolute temperature — the launcher's whole story is cold
+  starts, measured). Repo renamed to `github.com/xponer/kelvin-launcher` (GitHub redirects
+  the old URLs; this repo already survived one rename, Velopack follows it). **Kept, on
+  purpose:** Velopack `packId "Cryo"` (update chain), exe/namespace `VSpeedLauncher`, data
+  dirs, `cryo.local` host, `cryo-*.json` files, `cryo:` event prefix, DPAPI entropy string,
+  release asset names (`Cryo-win-Setup.exe`) — renaming ANY of those breaks existing
+  installs/tokens. Only user-facing strings changed. `UpdateService.RepoUrl`, build script,
+  About links → kelvin-launcher.
+- **Design: "instrument panel", structural de-slop.** The Reddit "AI slop" criticism was
+  right about the SKELETON, not just the paint: sidebar pills, centered search bar, card
+  grid with badge chips + big gradient Play buttons = the template look. Now: **Library is
+  a dense data TABLE by default** (stencil column headers INSTANCE/LOADER/MODS/RAM/CACHE/
+  BOOT, 42px rows, mono data, tiny square controls; grid view kept as option, view choice
+  persisted). **Sidebar = flat technical rail** (mono uppercase nav, 2px accent left edge,
+  telemetry footer readout). **Instance header = compact instrument bar** (accent edge,
+  mono meta line, small controls). Tokens: graphite surfaces (#161B1F/#1C2227), hard 2-6px
+  radii, 1px borders carry all depth, `--acc-grad` resolves to a FLAT colour so every
+  legacy gradient use flattens, shadows/glow/glass/blur/aurora/snowfall REMOVED, `.stencil`
+  utility (small uppercase mono) is the brand signature. Accent preset KEYS kept (stored in
+  config), values re-tuned; default cyan #35B8CB.
+- **Typography: IBM Plex Sans + Mono, vendored** (14 woff2, latin+cyrillic) — the Geist CDN
+  links are gone, so the CSP is now fully first-party (`style-src 'self' 'unsafe-inline';
+  font-src 'self'`) and the WebView2 tracking-prevention notices with it.
+- **New mark**: angular K in a gauge frame — inline SVG in the UI (accent-aware), generated
+  multi-res `cryo.ico` (filename kept for csproj/WPF/Velopack refs) via GDI+ script,
+  `docs/kelvin-512.png` for README/site. New splash ("cold start in progress"), favicon.
+- **Renames**: window title, tray, MessageBoxes, AI persona ("Kelvin Assistant"), Modrinth
+  UA, Discord RPC text, installer `packTitle "Kelvin"`, i18n/en+ru prose, README rewritten
+  (formerly-Cryo note, updated numbers table 145→85s), docs site rebranded. Fixed in
+  passing: `fmt.ram` printed "12.00390625 GB"; vanilla loader showed "?" in lists.
+- ⚠️ Watch after release: first auto-update hop old-URL → renamed repo (precedent says it
+  works); `og.png` on the docs site still shows the old brand (needs a re-render).
 
 ### v1.0.20 — released (GitHub) — Prepare pack pipeline · parallel installs · Resume click→in-world timing
 - **"Prepare pack"** (`Core/CryoBridge.Prepare.cs`, card at the top of Performance) — the whole

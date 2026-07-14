@@ -1,5 +1,5 @@
-﻿/* ============================================================
-   Cryo вЂ” Instance Detail: shell + Overview tab + LaunchCrystal
+/* ============================================================
+   Kelvin вЂ” Instance Detail: shell + Overview tab + LaunchCrystal
    ============================================================ */
 const { useState: iS, useEffect: iE, useRef: iR, useMemo: iMe, useCallback: iCb } = React;
 

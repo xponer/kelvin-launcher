@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — Modrinth Mod Browser
+   Kelvin — Modrinth Mod Browser
    Search mods scoped to the selected instance's MC version + loader,
    pick a version, and install (SHA-512 verified) into mods/.
    ============================================================ */
@@ -242,7 +242,7 @@ function ModrinthScreen() {
       React.createElement(Card, { style: { maxWidth: 440, textAlign: "center" } },
         React.createElement(Icon, { name: "package", size: 30, style: { color: "var(--acc-2)" } }),
         React.createElement("h3", { style: { margin: "12px 0 6px" } }, "Mod Browser runs in the desktop launcher"),
-        React.createElement("p", { style: { fontSize: 13, color: "var(--text-dim)" } }, "Open Cryo as the installed app to search and install mods from Modrinth.")));
+        React.createElement("p", { style: { fontSize: 13, color: "var(--text-dim)" } }, "Open Kelvin as the installed app to search and install mods from Modrinth.")));
 
   return React.createElement("div", { style: { height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" } },
     // Header

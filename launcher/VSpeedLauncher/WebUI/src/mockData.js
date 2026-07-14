@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — mock domain data + mockApi layer
+   Kelvin — mock domain data + mockApi layer
    Single source of truth. Swap the function bodies in `mockApi`
    for real backend calls during integration; signatures stay.
 
@@ -280,7 +280,7 @@ function genLogs(n) {
   let t = now - 95 * 1000;
   const msgs = {
     boot: [
-      "Starting Cryo launcher bridge on port 41637",
+      "Starting Kelvin launcher bridge on port 41637",
       "Java HotSpot(TM) 64-Bit Server VM (build 21.0.4+7-LTS)",
       "Loading 479 mods from instance 'All the Mods 10'",
       "JVM heap configured: -Xms4096m -Xmx12288m",

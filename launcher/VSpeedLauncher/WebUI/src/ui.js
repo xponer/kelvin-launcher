@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — icon set (lucide path data) + UI primitives
+   Kelvin — icon set (lucide path data) + UI primitives
    ============================================================ */
 const { useState: uS, useEffect: uE, useRef: uR, useCallback: uC, useMemo: uM } = React;
 
@@ -102,7 +102,7 @@ function Btn({ children, variant = "subtle", size = "md", icon, iconRight, iconS
     icon: { padding: 0, width: 34, height: 34, fontSize: 13 },
   };
   const variants = {
-    primary: { background: "var(--acc-grad)", color: "var(--acc-ink)", border: "1px solid transparent", fontWeight: 650, boxShadow: "0 6px 22px -8px var(--acc-glow)" },
+    primary: { background: "var(--acc-2)", color: "var(--acc-ink)", border: "1px solid transparent", fontWeight: 650 },
     accentSoft: { background: "var(--acc-soft)", color: "var(--acc-text)", border: "1px solid var(--acc-soft-2)", fontWeight: 600 },
     subtle: { background: "var(--panel-2)", color: "var(--text)", border: "1px solid var(--border)", fontWeight: 550 },
     ghost: { background: "transparent", color: "var(--text-dim)", border: "1px solid transparent", fontWeight: 550 },
@@ -149,7 +149,7 @@ function Badge({ children, tone = "neutral", icon, dot, size = "md", className =
       background: tg.bg, color: tg.fg, border: "1px solid " + tg.bd, whiteSpace: "nowrap", ...style,
     },
   },
-    dot && React.createElement("span", { style: { width: 6, height: 6, borderRadius: 99, background: "currentColor", boxShadow: "0 0 8px currentColor" } }),
+    dot && React.createElement("span", { style: { width: 6, height: 6, borderRadius: 1, background: "currentColor" } }),
     icon && React.createElement(Icon, { name: icon, size: 12 }),
     children,
   );
@@ -397,7 +397,7 @@ function Tabs({ tabs, value, onChange }) {
         tb.label,
         tb.badge != null && React.createElement("span", { className: "tnum", style: { fontSize: 11, color: "var(--text-faint)", fontWeight: 600 } }, tb.badge),
         active && React.createElement("span", {
-          style: { position: "absolute", left: 0, right: 0, bottom: -1, height: 2, borderRadius: 2, background: "var(--acc-grad)", boxShadow: "0 0 10px var(--acc-glow)" },
+          style: { position: "absolute", left: 0, right: 0, bottom: -1, height: 2, background: "var(--acc-2)" },
         }),
       );
     }),

@@ -50,7 +50,7 @@ public sealed class TrayIcon : IDisposable
         {
             Icon             = _trayIco,
             Visible          = true,
-            Text             = "Cryo Launcher",
+            Text             = "Kelvin",
             ContextMenuStrip = _menu,
         };
         _icon.DoubleClick += (_, _) => _openMain();
@@ -75,7 +75,7 @@ public sealed class TrayIcon : IDisposable
         var counts = _manager.Instances
             .GroupBy(i => i.State)
             .Select(g => $"{g.Key}: {g.Count()}");
-        _icon.Text = ("Cryo: " + string.Join(", ", counts)).Truncate(127);
+        _icon.Text = ("Kelvin: " + string.Join(", ", counts)).Truncate(127);
     }
 
     private void RebuildMenu()
@@ -83,7 +83,7 @@ public sealed class TrayIcon : IDisposable
         _menu.Items.Clear();
 
         // ── Header (branding) ──
-        _menu.Items.Add(new ToolStripMenuItem($"Cryo Launcher    {VersionString()}")
+        _menu.Items.Add(new ToolStripMenuItem($"Kelvin    {VersionString()}")
         {
             Image   = Glyphs.App(_trayIco),
             Enabled = false,
@@ -190,7 +190,7 @@ public sealed class TrayIcon : IDisposable
     {
         try
         {
-            if (!Directory.Exists(path)) { Notify("Cryo", "Folder not found:\n" + path); return; }
+            if (!Directory.Exists(path)) { Notify("Kelvin", "Folder not found:\n" + path); return; }
             Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
         }
         catch (Exception e) { Logger.Warn($"OpenFolder failed: {e.Message}"); }
@@ -210,34 +210,34 @@ public sealed class TrayIcon : IDisposable
             var up = new UpdateService();
             if (!up.IsInstalled)
             {
-                Notify("Cryo", "Auto-update is available only for the installed app (Setup.exe).");
+                Notify("Kelvin", "Auto-update is available only for the installed app (Setup.exe).");
                 return;
             }
-            Notify("Cryo", "Checking for updates…");
+            Notify("Kelvin", "Checking for updates…");
             var v = await up.CheckAsync();
             if (string.IsNullOrEmpty(v))
             {
-                Notify("Cryo", $"You're on the latest version ({up.CurrentVersion}).");
+                Notify("Kelvin", $"You're on the latest version ({up.CurrentVersion}).");
                 return;
             }
 
             var disp = System.Windows.Application.Current?.Dispatcher;
             bool yes = disp != null && disp.Invoke(() =>
                 System.Windows.MessageBox.Show(
-                    $"Cryo {v} is available (you have {up.CurrentVersion}).\n\nDownload and restart now?",
-                    "Cryo update",
+                    $"Kelvin {v} is available (you have {up.CurrentVersion}).\n\nDownload and restart now?",
+                    "Kelvin update",
                     System.Windows.MessageBoxButton.YesNo,
                     System.Windows.MessageBoxImage.Information) == System.Windows.MessageBoxResult.Yes);
             if (!yes) return;
 
-            Notify("Cryo", $"Downloading {v}…");
+            Notify("Kelvin", $"Downloading {v}…");
             await up.DownloadAsync();
             up.ApplyAndRestart(); // restarts into the new version
         }
         catch (Exception e)
         {
             Logger.Warn($"Tray update check failed: {e.Message}");
-            Notify("Cryo", "Update check failed: " + e.Message);
+            Notify("Kelvin", "Update check failed: " + e.Message);
         }
     }
 

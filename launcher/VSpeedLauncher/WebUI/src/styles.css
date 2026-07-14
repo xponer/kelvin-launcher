@@ -1,144 +1,168 @@
 /* ============================================================
-   Cryo Launcher — design tokens & base styles
+   KELVIN — design tokens & base styles.
+   Instrument-panel look: flat graphite surfaces, 1px lines, one
+   cyan accent, technical mono for data. No gradients, no glass,
+   no glow — the launcher is a tool, and it should look machined.
    Theme switching is driven entirely by CSS custom properties:
    [data-mode=dark|light] sets surfaces; [data-preset=…] sets accent.
    ============================================================ */
 
-@font-face { font-family: "Geist Fallback"; src: local("Inter"), local("system-ui"); }
+/* IBM Plex, vendored (no CDN): sans for UI, mono for data/labels. */
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 700; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-latin-700-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-cyrillic-400-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-cyrillic-500-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-cyrillic-600-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 700; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-sans-cyrillic-700-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-latin-600-normal.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-cyrillic-400-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-cyrillic-500-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; font-style: normal; font-display: swap; src: url("../vendor/fonts/ibm-plex-mono-cyrillic-600-normal.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
 
 :root {
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 22px;
-  --r-2xl: 26px;
-  --r-pill: 999px;
+  --r-sm: 3px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --r-xl: 8px;
+  --r-2xl: 10px;
+  --r-pill: 4px;   /* tags are rectangular on an instrument panel */
 
-  --pad-card: 22px;
-  --gap-grid: 18px;
-  --row-h: 40px;
-  --font-ui: "Geist Sans", "Geist", "Geist Fallback", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  --pad-card: 20px;
+  --gap-grid: 14px;
+  --row-h: 38px;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", "JetBrains Mono", monospace;
 
   --speed: 1;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* density */
-[data-density="compact"]    { --pad-card: 15px; --gap-grid: 12px; --row-h: 34px; }
-[data-density="comfortable"]{ --pad-card: 22px; --gap-grid: 18px; --row-h: 40px; }
+[data-density="compact"]    { --pad-card: 14px; --gap-grid: 10px; --row-h: 32px; }
+[data-density="comfortable"]{ --pad-card: 20px; --gap-grid: 14px; --row-h: 38px; }
 
-/* radius scale */
-[data-radius="sharp"]   { --r-md: 7px;  --r-lg: 9px;  --r-xl: 11px; --r-2xl: 13px; }
-[data-radius="rounded"] { --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-2xl: 26px; }
-[data-radius="pill"]    { --r-md: 16px; --r-lg: 22px; --r-xl: 30px; --r-2xl: 36px; }
+/* radius scale (all deliberately hard — "pill" is the softest we go) */
+[data-radius="sharp"]   { --r-md: 2px; --r-lg: 3px;  --r-xl: 4px;  --r-2xl: 5px;  --r-pill: 2px; }
+[data-radius="rounded"] { --r-md: 4px; --r-lg: 6px;  --r-xl: 8px;  --r-2xl: 10px; --r-pill: 4px; }
+[data-radius="pill"]    { --r-md: 6px; --r-lg: 8px;  --r-xl: 10px; --r-2xl: 12px; --r-pill: 8px; }
 
-/* ---------- DARK (default) ---------- */
+/* ---------- DARK (default): graphite instrument panel ---------- */
 [data-mode="dark"] {
-  --bg-0: #080B10;
-  --bg-1: #0B0F14;
-  --bg-2: #0E1620;
-  --bg-grad-a: #0d1a26;
-  --bg-grad-b: #0a0e14;
+  --bg-0: #101315;
+  --bg-1: #14181B;
+  --bg-2: #181D21;
+  --bg-grad-a: #14181b;
+  --bg-grad-b: #101315;
 
-  --panel:    rgba(148, 184, 220, 0.045);
-  --panel-2:  rgba(148, 184, 220, 0.075);
-  --panel-solid: #101822;
-  --panel-hi: rgba(148, 184, 220, 0.11);
+  --panel:    #161B1F;
+  --panel-2:  #1C2227;
+  --panel-solid: #161B1F;
+  --panel-hi: #232A30;
 
-  --border:        rgba(173, 205, 235, 0.10);
-  --border-strong: rgba(173, 205, 235, 0.18);
-  --border-faint:  rgba(173, 205, 235, 0.055);
+  --border:        #262E34;
+  --border-strong: #37424A;
+  --border-faint:  #1E2429;
 
-  --text:   #E8EFF6;
-  --text-dim:  #9DB0C2;
-  --text-faint: #5E7287;
+  --text:   #E4EAEC;
+  --text-dim:  #93A2A9;
+  --text-faint: #5C6B72;
 
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.04) inset, 0 18px 40px -22px rgba(0,0,0,0.8);
-  --shadow-pop: 0 24px 60px -18px rgba(0,0,0,0.85);
+  --shadow-card: none;
+  --shadow-pop: 0 12px 32px -8px rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
 }
 
-/* ---------- LIGHT ---------- */
+/* ---------- LIGHT: steel on paper ---------- */
 [data-mode="light"] {
-  --bg-0: #EEF3F8;
-  --bg-1: #F4F7FB;
-  --bg-2: #FBFDFF;
-  --bg-grad-a: #e3eefa;
-  --bg-grad-b: #f3f7fc;
+  --bg-0: #EDEFF0;
+  --bg-1: #F2F4F5;
+  --bg-2: #F7F9FA;
+  --bg-grad-a: #f2f4f5;
+  --bg-grad-b: #edeff0;
 
-  --panel:    rgba(255, 255, 255, 0.62);
-  --panel-2:  rgba(255, 255, 255, 0.82);
+  --panel:    #FBFCFC;
+  --panel-2:  #F1F4F5;
   --panel-solid: #FFFFFF;
-  --panel-hi: rgba(255, 255, 255, 0.95);
+  --panel-hi: #E8EDEF;
 
-  --border:        rgba(30, 64, 102, 0.13);
-  --border-strong: rgba(30, 64, 102, 0.22);
-  --border-faint:  rgba(30, 64, 102, 0.07);
+  --border:        #D4DBDE;
+  --border-strong: #B7C2C7;
+  --border-faint:  #E2E8EA;
 
-  --text:   #0E1A28;
-  --text-dim:  #46586B;
-  --text-faint: #7A8A9B;
+  --text:   #16211F;
+  --text-dim:  #4D5D63;
+  --text-faint: #7E8D93;
 
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.7) inset, 0 14px 34px -22px rgba(20,50,90,0.40);
-  --shadow-pop: 0 24px 60px -18px rgba(20,50,90,0.30);
+  --shadow-card: none;
+  --shadow-pop: 0 12px 32px -10px rgba(30, 45, 50, 0.28);
 
   color-scheme: light;
 }
 
-/* ---------- ACCENT PRESETS ---------- */
+/* ---------- ACCENT PRESETS ----------
+   Preset KEYS are kept (they're stored in user config); the values are
+   re-tuned to instrument colours — one hue per preset, no gradients. */
 [data-preset="glacier"] {
-  --acc-1: #67E8F9; --acc-2: #38BDF8; --acc-3: #6366F1;
-  --acc: #38BDF8; --acc-ink: #04141d;
+  --acc-1: #6BD9E7; --acc-2: #35B8CB; --acc-3: #2795A6;
+  --acc: #35B8CB; --acc-ink: #06181c;
 }
 [data-preset="aurora"] {
-  --acc-1: #6EE7B7; --acc-2: #34D399; --acc-3: #22D3EE;
-  --acc: #2DD4BF; --acc-ink: #042018;
+  --acc-1: #79DFA7; --acc-2: #3DBE76; --acc-3: #2E9A5F;
+  --acc: #3DBE76; --acc-ink: #071811;
 }
 [data-preset="midnight"] {
-  --acc-1: #818CF8; --acc-2: #6366F1; --acc-3: #A855F7;
-  --acc: #7C7DF4; --acc-ink: #0b0820;
+  --acc-1: #9BA8F2; --acc-2: #7383E4; --acc-3: #5A68c4;
+  --acc: #7383E4; --acc-ink: #0b0f24;
 }
 [data-preset="frost"] {
-  --acc-1: #BAE6FD; --acc-2: #93C5FD; --acc-3: #C4B5FD;
-  --acc: #A5C8F5; --acc-ink: #0a1422;
+  --acc-1: #C4D6DE; --acc-2: #9FB8C4; --acc-3: #7F9AA8;
+  --acc: #9FB8C4; --acc-ink: #101a20;
 }
 /* custom accent overrides handled inline via --acc-1/2/3 on root */
 
 :root {
-  --success: #34D399;
-  --success-dim: rgba(52, 211, 153, 0.14);
-  --warn: #FBBF77;
-  --warn-dim: rgba(251, 191, 119, 0.14);
-  --error: #FB7185;
-  --error-dim: rgba(251, 113, 133, 0.14);
+  --success: #4CC38A;
+  --success-dim: rgba(76, 195, 138, 0.13);
+  --warn: #E5A54B;
+  --warn-dim: rgba(229, 165, 75, 0.13);
+  --error: #E5646E;
+  --error-dim: rgba(229, 100, 110, 0.13);
   --info: var(--acc-2);
 
-  --acc-soft: color-mix(in oklab, var(--acc) 16%, transparent);
-  --acc-soft-2: color-mix(in oklab, var(--acc) 26%, transparent);
-  --acc-glow: color-mix(in oklab, var(--acc) 40%, transparent);
-  --acc-grad: linear-gradient(135deg, var(--acc-1), var(--acc-2) 52%, var(--acc-3));
-  --acc-text: color-mix(in oklab, var(--acc-1) 70%, white);
+  --acc-soft: color-mix(in oklab, var(--acc) 14%, transparent);
+  --acc-soft-2: color-mix(in oklab, var(--acc) 24%, transparent);
+  --acc-glow: color-mix(in oklab, var(--acc) 22%, transparent);
+  /* Flat by design: every legacy use of the "gradient" resolves to one colour. */
+  --acc-grad: linear-gradient(var(--acc), var(--acc));
+  --acc-text: color-mix(in oklab, var(--acc-1) 78%, white);
+}
+
+/* Stencil label — the Kelvin signature: small uppercase mono for section
+   labels and data captions. Use sparingly; it's seasoning, not the meal. */
+.stencil {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
   font-family: var(--font-ui);
-  /* Ambient aurora — two soft accent glows in the top corners over the base colour.
-     The frosted-glass panels sit on top, so it reads as subtle depth, and it retints
-     itself whenever the accent theme changes. */
-  background:
-    radial-gradient(46% 56% at 14% -4%, color-mix(in oklab, var(--acc) 20%, transparent), transparent 70%),
-    radial-gradient(42% 52% at 90% 2%, color-mix(in oklab, var(--acc) 13%, transparent), transparent 72%),
-    var(--bg-0);
-  background-attachment: fixed;
+  /* Flat. The panel is the interface — depth comes from 1px lines, not light shows. */
+  background: var(--bg-0);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden;
-  font-feature-settings: "cv05" 1, "ss01" 1;
 }
 #root { height: 100%; }
 
@@ -148,18 +172,13 @@ body {
 .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 .mono { font-family: var(--font-mono); }
 
-/* ---------- frosted glass surfaces ---------- */
+/* ---------- surfaces (class names kept; glass is gone) ---------- */
 .glass {
   background: var(--panel);
-  backdrop-filter: blur(10px) saturate(125%);
-  -webkit-backdrop-filter: blur(10px) saturate(125%);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-card);
 }
 .glass-2 {
   background: var(--panel-2);
-  backdrop-filter: blur(12px) saturate(130%);
-  -webkit-backdrop-filter: blur(12px) saturate(130%);
   border: 1px solid var(--border);
 }
 .glass-pop {
@@ -168,19 +187,15 @@ body {
   box-shadow: var(--shadow-pop);
 }
 
-/* gradient text */
-.acc-text {
-  background: var(--acc-grad);
-  -webkit-background-clip: text; background-clip: text;
-  color: transparent;
-}
+/* accent text (was gradient text — now one honest colour) */
+.acc-text { color: var(--acc-text); }
 
 /* scrollbars */
-*::-webkit-scrollbar { width: 11px; height: 11px; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 999px;
+  border-radius: 3px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
@@ -228,19 +243,9 @@ p, .md-body p.md-p { text-wrap: pretty; }
 [data-anim="off"] .anim-fadein { animation: none !important; }
 [data-anim="off"] * { transition: none !important; }
 
-/* Ambient snowfall (Cryo) — decorative, behind content, respects the anim toggle. */
-.cryo-snow { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
-.cryo-snow span {
-  position: absolute; top: -2vh; border-radius: 50%; background: #fff;
-  opacity: 0; will-change: transform; animation: cryo-fall linear infinite;
-}
-@keyframes cryo-fall {
-  0%   { transform: translate3d(0, -2vh, 0);                 opacity: 0; }
-  12%  { opacity: .5; }
-  88%  { opacity: .42; }
-  100% { transform: translate3d(var(--dx, 14px), 102vh, 0);  opacity: 0; }
-}
-[data-anim="off"] .cryo-snow { display: none; }
+/* (Ambient snowfall removed with the Kelvin redesign — decorative particle
+   effects read as template filler, and this launcher is an instrument.) */
+.cryo-snow { display: none; }
 
 .skeleton {
   background: linear-gradient(90deg, var(--panel) 0%, var(--panel-hi) 50%, var(--panel) 100%);
@@ -251,16 +256,12 @@ p, .md-body p.md-p { text-wrap: pretty; }
 
 .spin { animation: spin 1s linear infinite; }
 
-/* hover lift for cards */
-.lift { transition: transform .28s var(--ease), box-shadow .28s var(--ease), border-color .2s var(--ease); }
-.lift:hover { transform: translateY(-3px); border-color: var(--border-strong); }
+/* hover state for cards: the border wakes up — nothing moves */
+.lift { transition: border-color .15s var(--ease), background-color .15s var(--ease); }
+.lift:hover { border-color: var(--border-strong); }
 
-/* subtle inner top sheen on panels */
+/* sheen retired (kept as a no-op so existing markup doesn't break) */
 .sheen { position: relative; }
-.sheen::before {
-  content:""; position:absolute; inset:0; border-radius: inherit; pointer-events:none;
-  background: linear-gradient(180deg, rgba(255,255,255,0.05), transparent 40%);
-}
 
 /* thin divider */
 .hr { height:1px; background: var(--border); border:0; }
@@ -273,16 +274,15 @@ button { cursor: pointer; }
 input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 18px; height: 18px; border-radius: 99px;
-  background: #fff; border: 3px solid var(--acc-2);
-  box-shadow: 0 2px 8px rgba(0,0,0,.4), 0 0 0 4px var(--acc-soft);
-  cursor: pointer; margin-top: -6px;
+  width: 14px; height: 20px; border-radius: 3px;
+  background: var(--acc-2); border: 1px solid color-mix(in oklab, var(--acc-2) 60%, black);
+  cursor: pointer; margin-top: -7px;
 }
 input[type="range"]::-moz-range-thumb {
-  width: 16px; height: 16px; border-radius: 99px;
-  background: #fff; border: 3px solid var(--acc-2); cursor: pointer;
+  width: 14px; height: 20px; border-radius: 3px;
+  background: var(--acc-2); border: 1px solid color-mix(in oklab, var(--acc-2) 60%, black); cursor: pointer;
 }
-input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; }
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
 
 /* responsive: collapse 2-col layouts on narrow windows */
 @media (max-width: 920px) {

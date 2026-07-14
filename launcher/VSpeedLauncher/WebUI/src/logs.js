@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — Logs: a live, fully colour-coded debug console.
+   Kelvin — Logs: a live, fully colour-coded debug console.
    Per-segment colouring (time / level / thread / source / message),
    auto-hued threads & mod sources, per-level counts, click-to-filter,
    source + thread + level filters, regex search, crash banner, live tail.

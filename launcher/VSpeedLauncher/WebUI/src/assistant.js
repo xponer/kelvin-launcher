@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — AI Assistant
+   Kelvin — AI Assistant
    Diagnoses mod/crash/launch problems and proposes 1-click fixes.
    Renders assistant replies as Markdown (inline code, bold, lists,
    fenced code blocks, blockquotes, headers, horizontal rules).
@@ -334,7 +334,7 @@ function AssistantScreen() {
       React.createElement(Card, { style: { maxWidth: 440, textAlign: "center" } },
         React.createElement(Icon, { name: "sparkles", size: 30, style: { color: "var(--acc-2)" } }),
         React.createElement("h3", { style: { margin: "12px 0 6px" } }, "Assistant runs in the desktop launcher"),
-        React.createElement("p", { style: { fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 } }, "Open Cryo as the installed app to chat with the AI and apply fixes.")));
+        React.createElement("p", { style: { fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 } }, "Open Kelvin as the installed app to chat with the AI and apply fixes.")));
 
   return React.createElement("div", { style: { height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" } },
     // header
@@ -405,7 +405,7 @@ function AssistantScreen() {
       React.createElement("div", { style: { maxWidth: 760, margin: "0 auto", display: "flex", gap: 10, alignItems: "flex-end", background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: "var(--r-lg)", padding: 8 } },
         React.createElement("textarea", {
           className: "no-drag", value: input, onChange: e => setInput(e.target.value), onKeyDown: onKey,
-          placeholder: hasKey ? "Ask Cryo… (Enter to send, Shift+Enter for newline)" : "Add your API key in Settings first…",
+          placeholder: hasKey ? "Ask Kelvin… (Enter to send, Shift+Enter for newline)" : "Add your API key in Settings first…",
           rows: 1, disabled: busy,
           style: { flex: 1, resize: "none", maxHeight: 140, minHeight: 24, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5, lineHeight: 1.5, fontFamily: "inherit", padding: "6px 6px" } }),
         React.createElement(Btn, { variant: "primary", icon: busy ? "refresh" : "play", iconSpin: busy, disabled: busy || !input.trim(), onClick: () => send() }, "Send")),

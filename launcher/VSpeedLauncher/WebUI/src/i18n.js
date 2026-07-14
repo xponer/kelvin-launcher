@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo — i18n string tables (EN / RU)
+   Kelvin — i18n string tables (EN / RU)
    Strings are externalized so integration can wire a real i18n
    backend. Usage: const t = useT();  t("nav.library")
    Supports {param} interpolation: t("cache.saved", {n: 7.3})
@@ -45,7 +45,7 @@ const STRINGS = {
     "lib.sort.mods": "Mod count",
     "lib.sort.start": "Start time",
     "lib.empty.title": "No instances yet",
-    "lib.empty.body": "Create your first instance or import an existing modpack to get started. Cryo will profile its launch and build a VSpeed cache automatically.",
+    "lib.empty.body": "Create your first instance or import an existing modpack to get started. Kelvin will profile its launch and build a VSpeed cache automatically.",
     "lib.empty.cta": "Create instance",
     "lib.empty.import": "Import modpack",
     "lib.modsCount": "{n} mods",
@@ -116,7 +116,7 @@ const STRINGS = {
     "set.java": "Java runtime",
     "set.javaPath": "Java path",
     "set.jvm": "JVM arguments",
-    "set.jvmHelp": "One flag per chip. Cryo validates each and warns about commas, spaces, or heap flags that fight the RAM slider.",
+    "set.jvmHelp": "One flag per chip. Kelvin validates each and warns about commas, spaces, or heap flags that fight the RAM slider.",
     "set.jvmAdd": "Add argument…",
     "set.preset": "Preset",
     "set.window": "Window",
@@ -241,7 +241,7 @@ const STRINGS = {
     "lib.sort.mods": "Кол-во модов",
     "lib.sort.start": "Время старта",
     "lib.empty.title": "Пока нет инстансов",
-    "lib.empty.body": "Создайте первый инстанс или импортируйте модпак. Cryo профилирует запуск и автоматически соберёт VSpeed-кэш.",
+    "lib.empty.body": "Создайте первый инстанс или импортируйте модпак. Kelvin профилирует запуск и автоматически соберёт VSpeed-кэш.",
     "lib.empty.cta": "Создать инстанс",
     "lib.empty.import": "Импорт модпака",
     "lib.modsCount": "{n} модов",
@@ -312,7 +312,7 @@ const STRINGS = {
     "set.java": "Среда Java",
     "set.javaPath": "Путь к Java",
     "set.jvm": "Аргументы JVM",
-    "set.jvmHelp": "Один флаг на чип. Cryo валидирует каждый и предупреждает о запятых, пробелах и heap-флагах, конфликтующих со слайдером RAM.",
+    "set.jvmHelp": "Один флаг на чип. Kelvin валидирует каждый и предупреждает о запятых, пробелах и heap-флагах, конфликтующих со слайдером RAM.",
     "set.jvmAdd": "Добавить аргумент…",
     "set.preset": "Пресет",
     "set.window": "Окно",

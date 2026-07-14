@@ -1,5 +1,5 @@
-﻿/* ============================================================
-   Cryo вЂ” app store: settings, theme application, navigation,
+/* ============================================================
+   Kelvin вЂ” app store: settings, theme application, navigation,
    formatters. Persists to localStorage.
    ============================================================ */
 const { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } = React;
@@ -39,7 +39,13 @@ function fmtSecs(s) {
   return s.toFixed(s < 10 ? 1 : 0);
 }
 function fmtRam(mb) {
-  return mb >= 1024 ? (mb / 1024) + " GB" : mb + " MB";
+  if (mb >= 1024) {
+    const gb = mb / 1024;
+    // Round to one decimal; drop the ".0" (12.00390625 GB was a real sighting).
+    const r = Math.round(gb * 10) / 10;
+    return (Number.isInteger(r) ? r : r.toFixed(1)) + " GB";
+  }
+  return mb + " MB";
 }
 function fmtPlaytime(min) {
   const h = Math.floor(min / 60);
@@ -174,7 +180,7 @@ function createLaunchSim(instance, demoFactor = 8) {
    JS в†’ C#: window.chrome.webview.postMessage(JSON.stringify({id, method, args}))
    C# в†’ JS: window.chrome.webview.addEventListener('message', ...)
    ============================================================ */
-// In-page startup splash (markup in Cryo Launcher.html). Fades + removes itself once
+// In-page startup splash (markup in Kelvin Launcher.html). Fades + removes itself once
 // the UI is ready. Same DOM surface as the app, so there's no black gap on reveal.
 window.__cryoHideSplash = window.__cryoHideSplash || function () {
   var s = document.getElementById("cryo-splash");
@@ -347,7 +353,7 @@ function createBridgeApi() {
     async openCrashReport(id)           { return call("openCrashReport",    { id }); },
     async exportLogs(id, content)       { return call("exportLogs",         { id, content }); },
     async removeFromLauncher(id)        { return call("removeFromLauncher", { id }); },
-    // ── Cryo Engine (NeoForge install + launch without Prism) ────────────────
+    // ── Kelvin Engine (NeoForge install + launch without Prism) ────────────────
     async getEngineStatus(id)               { return call("getEngineStatus",      { id }, 10000); },
     async getNeoForgeVersions(mcVersion)    { return call("getNeoForgeVersions",  { mcVersion }, 30000); },
     async installNeoForge(id, neoForgeVersion) {

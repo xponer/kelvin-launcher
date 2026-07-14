@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo вЂ” Instance Detail container (header + launch + tabs)
+   Kelvin вЂ” Instance Detail container (header + launch + tabs)
    Supports both mock simulation (browser) and real bridge (WebView2).
    ============================================================ */
 const { useState: dS, useEffect: dE, useRef: dR, useCallback: dC } = React;
@@ -223,51 +223,50 @@ function InstanceDetail({ id, initialTab, autoLaunch }) {
   const playBtn = status === "idle"
     ? React.createElement("div", { style: { display: "flex", gap: 8 } },
         hasBridge && mcMinor >= 20 && React.createElement(Tip, { label: "Boot straight into your last singleplayer world — skips every menu (Quick Play, MC 1.20+)" },
-          React.createElement(Btn, { variant: "outline", size: "lg", icon: "refresh", onClick: () => startLaunch({ resume: true }) }, "Resume")),
-        React.createElement(Btn, { variant: "primary", size: "lg", icon: "play", onClick: () => startLaunch() }, t("common.play")))
+          React.createElement(Btn, { variant: "outline", icon: "refresh", onClick: () => startLaunch({ resume: true }) }, "Resume")),
+        React.createElement(Btn, { variant: "primary", icon: "play", onClick: () => startLaunch() }, t("common.play")))
     : status === "launching"
       ? React.createElement("div", { style: { display: "flex", gap: 8 } },
-          React.createElement(Btn, { variant: "accentSoft", size: "lg", icon: "loader", iconSpin: true, disabled: true },
+          React.createElement(Btn, { variant: "accentSoft", icon: "loader", iconSpin: true, disabled: true },
             React.createElement("span", { className: "tnum" },
               t("common.launching") + (modelT > 0 ? " " + modelT.toFixed(0) + "s" : ""))),
-          React.createElement(Btn, { variant: "outline", size: "lg", icon: "square", onClick: stop }))
-      : React.createElement("div", { style: { display: "flex", gap: 8 } },
-          React.createElement(Badge, { tone: "success", dot: true, style: { height: 46, padding: "0 18px", fontSize: 13.5 } }, t("common.running")),
-          React.createElement(Btn, { variant: "outline", size: "lg", icon: "power", onClick: stop }, t("common.stop")));
+          React.createElement(Btn, { variant: "outline", icon: "square", onClick: stop }))
+      : React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+          React.createElement(Badge, { tone: "success", dot: true }, t("common.running")),
+          React.createElement(Btn, { variant: "outline", icon: "power", onClick: stop }, t("common.stop")));
 
-  return React.createElement("div", { style: { padding: "20px 30px 40px", maxWidth: 1320, margin: "0 auto" } },
-    React.createElement("div", { style: { marginBottom: 20 } },
-      React.createElement("button", { className: "no-drag", onClick: () => navigate("library"),
-        style: { display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "transparent", color: "var(--text-dim)", fontSize: 13, fontWeight: 600, marginBottom: 14, padding: 0 } },
-        React.createElement(Icon, { name: "chevronLeft", size: 16 }), t("nav.library")),
+  // Compact instrument header: one dense bar — identity left, data middle, controls right.
+  const meta = [
+    (instance.loader || "Vanilla") + (instance.loaderVer ? " " + instance.loaderVer : ""),
+    instance.mc ? "MC " + instance.mc : null,
+    instance.mods + " mods",
+    fmt.ram(instance.ramMax),
+    instance.cacheState === "ready" ? "cache ready" : null,
+    hasBridge && instance.residentMB > 0 ? instance.residentMB + " MB resident" : null,
+  ].filter(Boolean).join("  ·  ");
+
+  return React.createElement("div", { style: { padding: "16px 26px 40px", maxWidth: 1320, margin: "0 auto" } },
+    React.createElement("div", { style: { marginBottom: 16 } },
+      React.createElement("button", { className: "no-drag stencil", onClick: () => navigate("library"),
+        style: { display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", cursor: "pointer", marginBottom: 10, padding: 0 } },
+        React.createElement(Icon, { name: "chevronLeft", size: 12 }), t("nav.library")),
       React.createElement("div", {
-        className: "glass sheen",
+        className: "glass",
         style: {
-          borderRadius: "var(--r-2xl)", padding: 20, position: "relative", overflow: "hidden",
-          background: `radial-gradient(110% 160% at 88% -20%, ${instance.accent}33, transparent 55%), var(--panel)`,
+          borderRadius: "var(--r-lg)", padding: "14px 16px", position: "relative",
+          borderLeft: "3px solid " + (instance.accent || "var(--acc-2)"),
+          display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
         },
       },
-        React.createElement(Icon, { name: "snowflake", size: 200,
-          style: { position: "absolute", right: -40, top: -60, color: instance.accent, opacity: 0.12 } }),
-        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", position: "relative" } },
-          React.createElement("div", { style: { width: 60, height: 60, borderRadius: 16, background: "var(--panel-solid)", border: "1px solid var(--border-strong)", display: "grid", placeItems: "center", color: instance.accent, flexShrink: 0 } },
-            React.createElement(Icon, { name: instance.loader === "Fabric" ? "layers" : instance.loader === "Forge" ? "cpu" : "gem", size: 30 })),
-          React.createElement("div", { style: { flex: 1, minWidth: 220 } },
-            React.createElement("h1", { style: { margin: 0, fontSize: 24, fontWeight: 730, letterSpacing: "-0.02em" } }, instance.name),
-            React.createElement("div", { style: { display: "flex", gap: 7, marginTop: 9, flexWrap: "wrap" } },
-              React.createElement(Badge, { tone: "neutral", icon: "layers" }, (instance.loader || "?") + (instance.loaderVer ? " " + instance.loaderVer : "")),
-              instance.mc && React.createElement(Badge, { tone: "neutral", icon: "cpu" }, "MC " + instance.mc),
-              React.createElement(Badge, { tone: "neutral", icon: "package" }, t("lib.modsCount", { n: instance.mods })),
-              React.createElement(Badge, { tone: "neutral", icon: "ram" }, fmt.ram(instance.ramMin) + " – " + fmt.ram(instance.ramMax)),
-              cacheBadge(instance.cacheState, t),
-              hasBridge && instance.residentMB > 0 && React.createElement(Badge, { tone: "neutral", icon: "database" }, instance.residentMB + " MB"),
-            ),
-          ),
-          hasBridge && React.createElement(Tip, { label: "Open the live game console in its own window" },
-            React.createElement(Btn, { variant: "outline", size: "lg", icon: "terminal",
-              onClick: () => api.openConsole && api.openConsole(instance.id).catch(() => {}) })),
-          playBtn,
-        ),
+        React.createElement("div", { style: { width: 40, height: 40, borderRadius: "var(--r-md)", background: "var(--panel-2)", border: "1px solid var(--border-strong)", display: "grid", placeItems: "center", color: instance.accent, flexShrink: 0 } },
+          React.createElement(Icon, { name: instance.loader === "Fabric" ? "layers" : instance.loader === "Forge" ? "cpu" : "gem", size: 20 })),
+        React.createElement("div", { style: { flex: 1, minWidth: 220 } },
+          React.createElement("h1", { style: { margin: 0, fontSize: 17, fontWeight: 650, letterSpacing: "-0.01em" } }, instance.name),
+          React.createElement("div", { className: "mono", style: { fontSize: 11, color: "var(--text-faint)", marginTop: 4 } }, meta)),
+        hasBridge && React.createElement(Tip, { label: "Open the live game console in its own window" },
+          React.createElement(Btn, { variant: "outline", size: "icon", icon: "terminal",
+            onClick: () => api.openConsole && api.openConsole(instance.id).catch(() => {}) })),
+        playBtn,
       ),
     ),
     React.createElement("div", { style: { marginBottom: 22 } },

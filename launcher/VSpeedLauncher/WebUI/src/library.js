@@ -1,5 +1,5 @@
 /* ============================================================
-   Cryo вЂ” Library screen
+   Kelvin вЂ” Library screen
    ============================================================ */
 const { useState: lS, useEffect: lE, useMemo: lM, useCallback: lCb } = React;
 var { useApp } = window.CryoStore;
@@ -11,16 +11,21 @@ function cacheBadge(state, t) {
 }
 
 function Banner({ instance, h = 96 }) {
-  const a = instance.accent || "#38BDF8";
+  const a = instance.accent || "var(--acc-2)";
+  // Flat cover: graphite plate, big low-key loader glyph, a single accent
+  // hairline along the top edge — the instance's colour used as a signal,
+  // not a light show.
   return React.createElement("div", {
     style: {
       height: h, borderRadius: "var(--r-lg)", position: "relative", overflow: "hidden",
-      background: `radial-gradient(120% 140% at 80% 0%, ${a}55, transparent 60%), linear-gradient(135deg, ${a}33, var(--panel-2))`,
+      background: "var(--panel-2)",
       border: "1px solid var(--border)",
+      borderTop: "2px solid " + a,
     },
   },
-    React.createElement(Icon, { name: "snowflake", size: h, style: { position: "absolute", right: -12, bottom: -18, color: a, opacity: 0.18 } }),
-    React.createElement("div", { style: { position: "absolute", left: 14, bottom: 12, width: 40, height: 40, borderRadius: 11, background: "var(--panel-solid)", border: "1px solid var(--border-strong)", display: "grid", placeItems: "center", color: a } },
+    React.createElement(Icon, { name: instance.loader === "Fabric" ? "layers" : instance.loader === "Forge" ? "cpu" : "gem",
+      size: h * 0.92, style: { position: "absolute", right: -10, bottom: -16, color: a, opacity: 0.10 } }),
+    React.createElement("div", { style: { position: "absolute", left: 14, bottom: 12, width: 40, height: 40, borderRadius: "var(--r-md)", background: "var(--panel-solid)", border: "1px solid var(--border-strong)", display: "grid", placeItems: "center", color: a } },
       React.createElement(Icon, { name: instance.loader === "Fabric" ? "layers" : instance.loader === "Forge" ? "cpu" : "gem", size: 20 })),
   );
 }
@@ -39,7 +44,7 @@ function DeleteConfirm({ instance, onConfirm, onCancel }) {
         React.createElement(Icon, { name: "trash", size: 26 })),
       React.createElement("h3", { style: { margin: "0 0 8px", fontSize: 18, fontWeight: 700 } }, "Remove from launcher?"),
       React.createElement("p", { style: { margin: "0 0 24px", fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.5 } },
-        React.createElement("strong", null, instance.name), " will be removed from Cryo's launcher list.",
+        React.createElement("strong", null, instance.name), " will be removed from Kelvin's launcher list.",
         React.createElement("br", null),
         React.createElement("span", { style: { color: "var(--text-faint)" } },
           "The actual Prism instance and game files are NOT deleted.")),
@@ -162,28 +167,49 @@ function InstanceCard({ instance, kpi, onOpen, onPlay, t, fmt, menu, tagColors }
   );
 }
 
-function InstanceRow({ instance, kpi, onOpen, onPlay, t, fmt, menu, tagColors }) {
+/* Dense data row — the library as an instrument table, not a card wall. */
+const ROW_COLS = "18px 20px minmax(200px, 1fr) 150px 64px 56px 60px 64px 30px 30px";
+
+function ListHeader() {
+  const th = (label, right) => React.createElement("span", { className: "stencil", style: { textAlign: right ? "right" : "left" } }, label);
   return React.createElement("div", {
-    className: "glass sheen anim-fadeup", onClick: onOpen,
-    style: { borderRadius: "var(--r-lg)", padding: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 14 },
+    style: { display: "grid", gridTemplateColumns: ROW_COLS, alignItems: "center", gap: 10,
+      padding: "7px 12px", borderBottom: "1px solid var(--border)", background: "var(--panel-2)" },
+  }, th(""), th(""), th("instance"), th("loader"), th("mods", true), th("ram", true), th("cache", true), th("boot", true), th(""), th(""));
+}
+
+function InstanceRow({ instance, kpi, onOpen, onPlay, t, fmt, menu, tagColors }) {
+  const a = instance.accent || "var(--acc-2)";
+  const st = instance.state;
+  const dotColor = st === "ready" ? "var(--success)" : (st === "loading" || st === "waking") ? "var(--warn)" : st === "crashed" ? "var(--error)" : "var(--border-strong)";
+  const mono = (v, dim) => React.createElement("span", { className: "mono tnum", style: { fontSize: 11.5, color: dim ? "var(--text-faint)" : "var(--text-dim)", textAlign: "right" } }, v);
+  return React.createElement("div", {
+    className: "no-drag", onClick: onOpen,
+    style: { display: "grid", gridTemplateColumns: ROW_COLS, alignItems: "center", gap: 10,
+      padding: "0 12px", height: 42, cursor: "pointer", borderBottom: "1px solid var(--border-faint)", transition: "background .1s" },
+    onMouseEnter: e => { e.currentTarget.style.background = "var(--panel-2)"; },
+    onMouseLeave: e => { e.currentTarget.style.background = "transparent"; },
   },
-    React.createElement("div", { style: { width: 52, height: 52, flexShrink: 0 } }, React.createElement(Banner, { instance, h: 52 })),
-    React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-      React.createElement("div", { style: { fontSize: 14.5, fontWeight: 680, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, instance.name),
-      React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 } },
-        (instance.loader || "?") + (instance.mc ? " " + instance.mc : "") + "  •  " + t("lib.modsCount", { n: instance.mods }) + "  •  " + fmt.ram(instance.ramMax)),
-      (instance.tags && instance.tags.length > 0) && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 5, marginTop: 4 } },
-        instance.tags.slice(0, 6).map(tg => React.createElement("span", { key: "tg-" + tg,
-          style: { ...modTagChip(tg, false, tagColors && tagColors[tg]), padding: "1px 7px" } }, tg))),
-    ),
-    cacheBadge(instance.cacheState, t),
-    kpi && kpi.avg > 0 && React.createElement("span", { className: "tnum", style: { fontSize: 12.5, color: "var(--text-dim)", fontWeight: 600, minWidth: 70, textAlign: "right" } },
-      "~" + kpi.avg + "s"),
-    React.createElement(Btn, { variant: "primary", icon: "play", size: "sm", onClick: e => { e.stopPropagation(); onPlay(); } }, t("common.play")),
+    React.createElement("span", { title: st || "stopped", style: { width: 7, height: 7, borderRadius: 1, background: dotColor, justifySelf: "center" } }),
+    React.createElement(Icon, { name: instance.loader === "Fabric" ? "layers" : instance.loader === "Forge" ? "cpu" : "gem", size: 15, style: { color: a } }),
+    React.createElement("span", { style: { display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 } },
+      React.createElement("span", { style: { fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, instance.name),
+      (instance.tags || []).slice(0, 3).map(tg => React.createElement("span", { key: "tg-" + tg, className: "mono",
+        style: { fontSize: 10, color: tagEffectiveHex(tg, tagColors), whiteSpace: "nowrap" } }, tg))),
+    React.createElement("span", { className: "mono", style: { fontSize: 11.5, color: "var(--text-dim)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } },
+      (instance.loader || "Vanilla") + " " + (instance.mc || "")),
+    mono(instance.mods),
+    mono(fmt.ram(instance.ramMax)),
+    mono(instance.cacheState === "ready" ? "ready" : "—", instance.cacheState !== "ready"),
+    mono(kpi && kpi.avg > 0 ? "~" + kpi.avg + "s" : "—", !(kpi && kpi.avg > 0)),
+    React.createElement(Tip, { label: t("common.play") },
+      React.createElement("button", { className: "no-drag", onClick: e => { e.stopPropagation(); onPlay(); },
+        style: { width: 26, height: 26, borderRadius: "var(--r-sm)", border: "1px solid var(--border-strong)", background: "transparent", color: "var(--acc-text)", display: "grid", placeItems: "center" } },
+        React.createElement(Icon, { name: "play", size: 13 }))),
     React.createElement(Menu, {
       align: "right", items: menu,
-      trigger: React.createElement("button", { className: "no-drag", style: { width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text-dim)", display: "grid", placeItems: "center" } },
-        React.createElement(Icon, { name: "dots", size: 16 })),
+      trigger: React.createElement("button", { className: "no-drag", style: { width: 26, height: 26, borderRadius: "var(--r-sm)", border: "none", background: "transparent", color: "var(--text-faint)", display: "grid", placeItems: "center" } },
+        React.createElement(Icon, { name: "dots", size: 15 })),
     }),
   );
 }
@@ -252,7 +278,9 @@ function LibraryScreen() {
   const [kpis, setKpis] = lS({});
   const [q, setQ] = lS("");
   const [sort, setSort] = lS("recent");
-  const [view, setView] = lS("grid");
+  // List is the default — a library is a table of machines, not a poster wall.
+  const [view, setViewRaw] = lS(() => { try { return localStorage.getItem("kelvin.libview") || "list"; } catch { return "list"; } });
+  const setView = v => { setViewRaw(v); try { localStorage.setItem("kelvin.libview", v); } catch { } };
   const [deleteTarget, setDeleteTarget] = lS(null);  // instance to confirm delete
   const [showCreate, setShowCreate] = lS(false);
   const [roots, setRoots] = lS([]);   // instance locations (for the "Move →" menu)
@@ -402,10 +430,13 @@ function LibraryScreen() {
       onSave: (tags, note) => saveInstanceMeta(tagsTarget, tags, note),
     }),
 
-    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 14, marginBottom: 22, flexWrap: "wrap" } },
-      React.createElement("h1", { style: { margin: 0, fontSize: 24, fontWeight: 720, letterSpacing: "-0.02em" } }, t("lib.title")),
-      React.createElement("span", { className: "tnum", style: { fontSize: 13, color: "var(--text-faint)", fontWeight: 600 } },
-        state === "ready" ? instances.length : ""),
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" } },
+      React.createElement("div", null,
+        React.createElement("div", { className: "stencil", style: { color: "var(--acc-text)" } }, "// library"),
+        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginTop: 2 } },
+          React.createElement("span", { style: { fontSize: 17, fontWeight: 650 } }, t("lib.title")),
+          React.createElement("span", { className: "mono tnum", style: { fontSize: 12, color: "var(--text-faint)" } },
+            state === "ready" ? instances.length + " instances" : ""))),
       React.createElement("div", { style: { flex: 1 } }),
       React.createElement(TextInput, { value: q, onChange: setQ, placeholder: t("common.search"), icon: "search", size: "sm", style: { width: 200 } }),
       React.createElement(Select, { value: sort, onChange: setSort, size: "sm", width: 168, icon: "sort",
@@ -468,7 +499,8 @@ function LibraryScreen() {
             onOpen:  () => navigate("instance", { id: inst.id }),
             onPlay:  () => navigate("instance", { id: inst.id, autoLaunch: true }),
           })))
-      : React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
+      : React.createElement("div", { className: "glass", style: { borderRadius: "var(--r-lg)", overflow: "hidden" } },
+          React.createElement(ListHeader, null),
           filtered.map(inst => React.createElement(InstanceRow, {
             key: inst.id, instance: inst, kpi: kpis[inst.id], t, fmt, menu: menuFor(inst), tagColors,
             onOpen:  () => navigate("instance", { id: inst.id }),

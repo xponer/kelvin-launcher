@@ -12,7 +12,7 @@
     .\build-release.ps1 -Version 1.4.1  # override / bump
 
   After it finishes, publish to GitHub Releases so the app can auto-update:
-    vpk upload github --repoUrl https://github.com/xponer/vspeed-cryoLauncher `
+    vpk upload github --repoUrl https://github.com/xponer/kelvin-launcher `
         --publish --releaseName "Cryo v<ver>" --tag v<ver> --token <YOUR_GH_PAT>
 #>
 param([string]$Version = "")
@@ -21,7 +21,7 @@ $ErrorActionPreference = "Stop"
 $proj       = Join-Path $PSScriptRoot "VSpeedLauncher\VSpeedLauncher.csproj"
 $publishDir = Join-Path $PSScriptRoot "publish"
 $releaseDir = Join-Path $PSScriptRoot "Releases"
-$repo       = "https://github.com/xponer/vspeed-cryoLauncher"
+$repo       = "https://github.com/xponer/kelvin-launcher"
 
 # ── Resolve version (param wins, else <Version> from the csproj) ──
 if (-not $Version) {
@@ -53,7 +53,7 @@ Write-Host "==> vpk pack" -ForegroundColor Cyan
 $packArgs = @(
     "pack",
     "--packId",      "Cryo",
-    "--packTitle",   "Cryo Launcher",
+    "--packTitle",   "Kelvin",
     "--packAuthors", "xponer",
     "--packVersion", $Version,
     "--packDir",     $publishDir,
