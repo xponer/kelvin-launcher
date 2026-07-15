@@ -385,6 +385,181 @@ function TurboCard({ instance, api, hasBridge }) {
 }
 
 /* ============ SPEED BOOSTERS (Defender · ModernFix dynamic resources) ============ */
+/* ============ IN-GAME: FPS BENCH · SESSION BOOST · RUNTIME LAB · PRE-BAKER ============ */
+function InGameCard({ instance, api, hasBridge }) {
+  const [fps, setFps]   = tS(null);   // getFpsBench
+  const [boost, setBoost] = tS(null); // getBoost
+  const [rl, setRl]     = tS(null);   // getRuntimeLab
+  const [pb, setPb]     = tS(null);   // getPrebake
+  const [ev, setEv]     = tS(null);   // last fpsEvent
+  const [pev, setPev]   = tS(null);   // last prebakeEvent
+  const [radius, setRadius] = tS(1000);
+  const [busy, setBusy] = tS("");     // graal | lp
+
+  async function load() {
+    if (!hasBridge) return;
+    const [f, b, r, p] = await Promise.all([
+      api.getFpsBench(instance.id).catch(() => null),
+      api.getBoost().catch(() => null),
+      api.getRuntimeLab(instance.id).catch(() => null),
+      api.getPrebake(instance.id).catch(() => null),
+    ]);
+    if (f && f.ok) setFps(f);
+    if (b && b.ok) setBoost(b);
+    if (r && r.ok) setRl(r);
+    if (p && p.ok) setPb(p);
+  }
+  tE(() => { load(); }, [hasBridge, instance.id]);
+
+  tE(() => {
+    function onFps(e) {
+      const d = e.detail || {}; setEv(d);
+      if (d.phase === "done") window.toast({ tone: "success", icon: "gauge", title: "FPS measured", body: d.message || "" });
+      else if (d.phase === "error") window.toast({ tone: "danger", icon: "alert", title: "FPS benchmark failed", body: d.message || "" });
+      if (["done", "error", "cancelled"].includes(d.phase)) load();
+    }
+    function onPb(e) {
+      const d = e.detail || {}; setPev(d);
+      if (d.phase === "done") window.toast({ tone: "success", icon: "check", title: "World pre-baked", body: d.message || "" });
+      else if (d.phase === "error") window.toast({ tone: "danger", icon: "alert", title: "Pre-bake failed", body: d.message || "" });
+      if (["done", "error", "cancelled"].includes(d.phase)) load();
+    }
+    window.addEventListener("cryo:fpsEvent", onFps);
+    window.addEventListener("cryo:prebakeEvent", onPb);
+    return () => { window.removeEventListener("cryo:fpsEvent", onFps); window.removeEventListener("cryo:prebakeEvent", onPb); };
+  }, [instance.id]);
+
+  const fpsRunning = !!(fps && fps.running);
+  const pbRunning  = !!(pb && pb.running);
+  const hist = (fps && fps.history) || [];
+
+  // ── FPS benchmark ──
+  async function runFps() {
+    const r = await api.startFpsBench(instance.id).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok === false) window.toast({ tone: "warn", icon: "info", title: "Can't start", body: r.error || "" });
+    else setEv({ phase: "launching", message: "Starting…" });
+    load();
+  }
+  // ── Session Boost ──
+  async function toggleBoost(on) { await api.setBoost(on, !!(boost && boost.largePages)).catch(() => {}); load(); }
+  async function toggleLp(on) {
+    if (on && boost && !boost.lpGranted) {
+      setBusy("lp");
+      const r = await api.grantLargePages().catch(e => ({ ok: false, error: String(e) }));
+      setBusy("");
+      if (!(r && r.ok)) { window.toast({ tone: "warn", icon: "info", title: "Large pages not enabled", body: (r && r.error) || "" }); return; }
+      window.toast({ tone: "accent", icon: "info", title: "Large pages granted", body: "Sign out and back in once for it to take effect." });
+    }
+    await api.setBoost(!!(boost && boost.enabled), on).catch(() => {});
+    load();
+  }
+  // ── Runtime Lab ──
+  async function pickGc(gc) {
+    const r = await api.setGc(instance.id, gc).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok) window.toast({ tone: "accent", icon: "zap", title: "Garbage collector: " + gc.toUpperCase(), body: "Applies on next launch — measure it with the FPS benchmark." });
+    else window.toast({ tone: "warn", icon: "info", title: "Couldn't switch GC", body: (r && r.error) || "" });
+    load();
+  }
+  // ── Pre-baker ──
+  async function runPrebake() {
+    const ok = window.confirm(
+      "Pre-bake a " + radius + "-block radius around spawn?\n\n" +
+      "Kelvin backs up your world, then generates chunks on this pack's server and merges them into your save — so exploring is lag-free. " +
+      "Big packs can take 20–90 minutes; your existing chunks are never overwritten. The hosted server must be set up (Host server tab).");
+    if (!ok) return;
+    const r = await api.startPrebake(instance.id, radius).catch(e => ({ ok: false, error: String(e) }));
+    if (r && r.ok === false) window.toast({ tone: "warn", icon: "info", title: "Can't start", body: r.error || "" });
+    else setPev({ phase: "backup", message: "Starting…" });
+    load();
+  }
+
+  const seg = (label, on, onClick, disabled) => React.createElement("button", { className: "no-drag", disabled, onClick,
+    style: { padding: "6px 12px", borderRadius: "var(--r-sm)", fontSize: 12, fontWeight: 600, cursor: disabled ? "default" : "pointer",
+      border: "1px solid " + (on ? "var(--acc-2)" : "var(--border-strong)"), background: on ? "var(--acc-soft)" : "transparent",
+      color: on ? "var(--acc-text)" : "var(--text-dim)" } }, label);
+
+  return React.createElement(Card, { style: { borderRadius: "var(--r-xl)", border: "1px solid var(--acc-soft-2)" } },
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, marginBottom: 4 } },
+      React.createElement(Icon, { name: "gauge", size: 17, style: { color: "var(--acc-2)" } }),
+      React.createElement("h3", { style: { margin: 0, fontSize: 15, fontWeight: 680, flex: 1 } }, "In-game performance"),
+      React.createElement("span", { className: "stencil" }, "measured")),
+    React.createElement("p", { style: { margin: "6px 0 12px", fontSize: 12, color: "var(--text-faint)", lineHeight: 1.5 } },
+      "The launch is fast — this is about frames. Measure real in-world FPS, then try the levers and watch the number move."),
+
+    // ── FPS benchmark ──
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingBottom: 10, borderBottom: "1px solid var(--border)" } },
+      React.createElement("div", { style: { flex: 1, minWidth: 200 } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 650 } }, "In-world FPS benchmark"),
+        React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 } },
+          "Resumes into your world, captures 60s of real frame times (Intel PresentMon). One admin prompt.")),
+      fpsRunning
+        ? React.createElement(Btn, { variant: "outline", size: "sm", icon: "x", onClick: () => api.cancelFpsBench().catch(() => {}) }, "Cancel")
+        : React.createElement(Btn, { variant: "primary", size: "sm", icon: "gauge", onClick: runFps }, "Measure FPS")),
+    fpsRunning && ev && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 0", fontSize: 12.5, color: "var(--text-dim)" } },
+      React.createElement(Icon, { name: "loader", size: 13, spin: true }), ev.message || "working…"),
+    hist.length > 0 && React.createElement("div", { style: { padding: "10px 0", borderBottom: "1px solid var(--border)" } },
+      hist.slice(0, 5).map((h, i) => React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 10, fontSize: 12, padding: "3px 0" } },
+        React.createElement("span", { className: "mono tnum", style: { fontWeight: 700, color: "var(--acc-text)", width: 62 } }, h.avgFps + " fps"),
+        React.createElement("span", { className: "mono tnum", style: { color: "var(--text-dim)", width: 92 } }, h.low1Fps + " 1% low"),
+        React.createElement("span", { className: "mono tnum", style: { color: "var(--text-faint)", width: 70 } }, h.stutterPct + "% stut"),
+        React.createElement("span", { className: "mono", style: { color: "var(--text-faint)", flex: 1, textAlign: "right" } }, h.tags)))),
+
+    // ── Session Boost ──
+    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid var(--border)" } },
+      React.createElement("div", { style: { flex: 1 } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 650 } }, "Game Session Boost"),
+        React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2, lineHeight: 1.45 } },
+          "High CPU priority" + (boost && boost.hybridCpu ? " + pin to your " + boost.pCores + " P-cores" : "") + ", discrete-GPU preference, and High-Performance power while the game runs.")),
+      React.createElement(Toggle, { checked: !!(boost && boost.enabled), onChange: toggleBoost })),
+    boost && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" } },
+      React.createElement("div", { style: { flex: 1 } },
+        React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600 } }, "Large memory pages (advanced)"),
+        React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", marginTop: 2 } },
+          boost.lpGranted ? "Privilege granted — takes effect after a sign-out/in." : "5–10% win. Needs a one-time admin grant + re-login.")),
+      busy === "lp" ? React.createElement(Icon, { name: "loader", size: 15, spin: true })
+        : React.createElement(Toggle, { checked: !!boost.largePages, onChange: toggleLp })),
+
+    // ── Runtime Lab ──
+    rl && React.createElement("div", { style: { padding: "12px 0", borderBottom: "1px solid var(--border)" } },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+        React.createElement("div", { style: { flex: 1, minWidth: 180 } },
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 650 } }, "Runtime Lab — garbage collector"),
+          React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 } },
+            "G1 = throughput. ZGC = far fewer stutter spikes (often felt more than raw FPS).")),
+        React.createElement("div", { style: { display: "flex", gap: 6 } },
+          seg("G1", rl.gc === "g1", () => pickGc("g1"), rl.gc === "g1"),
+          seg("ZGC", rl.gc === "zgc", () => rl.zgcSupported ? pickGc("zgc") : window.toast({ tone: "warn", icon: "info", title: "ZGC needs MC 1.20.5+" }), rl.gc === "zgc" || !rl.zgcSupported))),
+      rl.gc === "custom" && React.createElement("div", { style: { fontSize: 11, color: "var(--warn)", marginTop: 6 } }, "Custom JVM args detected — pick a preset to let Kelvin manage the GC."),
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 11.5, color: "var(--text-faint)" } },
+        React.createElement("span", null, "Alternative JIT:"),
+        rl.graalInstalled
+          ? React.createElement(Badge, { tone: rl.graalActive ? "success" : "neutral", size: "sm" }, rl.graalActive ? "GraalVM active" : "GraalVM installed")
+          : React.createElement(Btn, { variant: "ghost", size: "sm", icon: busy === "graal" ? "loader" : "download", iconSpin: busy === "graal",
+              onClick: () => { setBusy("graal"); api.installGraal(instance.id).catch(() => {}); window.toast({ tone: "accent", icon: "download", title: "Downloading GraalVM…", body: "~320 MB, one time." }); } }, "Add GraalVM (~320 MB)"),
+        rl.graalActive && React.createElement(Btn, { variant: "ghost", size: "sm", onClick: () => api.useBundledJava(instance.id).then(load) }, "Revert to bundled Java"))),
+
+    // ── World Pre-Baker ──
+    React.createElement("div", { style: { paddingTop: 12 } },
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+        React.createElement("div", { style: { flex: 1, minWidth: 180 } },
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 650 } }, "World Pre-Baker"),
+          React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2, lineHeight: 1.45 } },
+            "Generates chunks on this pack's server and merges them into your save — explore with zero chunk-gen lag. Existing chunks untouched.")),
+        pbRunning
+          ? React.createElement(Btn, { variant: "outline", size: "sm", icon: "x", onClick: () => api.cancelPrebake().catch(() => {}) }, "Cancel")
+          : React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+              React.createElement(Select, { value: String(radius), onChange: v => setRadius(parseInt(v, 10)), size: "sm", width: 120,
+                options: [{ value: "500", label: "500 blocks" }, { value: "1000", label: "1000 blocks" }, { value: "2000", label: "2000 blocks" }, { value: "3000", label: "3000 blocks" }] }),
+              React.createElement(Btn, { variant: "primary", size: "sm", icon: "gem", onClick: runPrebake }, "Pre-bake"))),
+      pbRunning && pev && React.createElement("div", { style: { marginTop: 8 } },
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--text-dim)" } },
+          React.createElement(Icon, { name: "loader", size: 13, spin: true }), pev.message || "working…"),
+        pev.phase === "generating" && typeof pev.percent === "number" && React.createElement("div", { style: { height: 6, borderRadius: 3, background: "var(--panel-2)", overflow: "hidden", marginTop: 6 } },
+          React.createElement("div", { style: { height: "100%", width: pev.percent + "%", background: "var(--acc-2)" } }))),
+      !pbRunning && pb && !pb.serverReady && React.createElement("div", { style: { marginTop: 8, fontSize: 11.5, color: "var(--text-faint)" } },
+        "Set up the hosted server first (Host server tab) — the pre-baker uses it to generate.")));
+}
+
 /* ============ PREPARE PACK (optimize → train Turbo → benchmark, unattended) ============ */
 function PreparePackCard({ instance, api, hasBridge }) {
   const [st, setSt] = tS(null);     // { running }
@@ -1087,6 +1262,9 @@ function PerformanceTab({ instance, cache: cache0, t, fmt, api, hasBridge }) {
         React.createElement(Toggle, { checked: enabled, onChange: setEnabled }),
       ),
     ),
+
+    // In-game performance — FPS benchmark, Session Boost, Runtime Lab, Pre-Baker
+    React.createElement(InGameCard, { instance, api, hasBridge }),
 
     // Prepare pack — optimize → train Turbo → benchmark, one unattended click
     React.createElement(PreparePackCard, { instance, api, hasBridge }),

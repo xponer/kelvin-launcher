@@ -341,6 +341,19 @@ public sealed partial class CryoBridge
             "startBisect"         => StartBisect(args.Str("id")),
             "cancelBisect"        => CancelBisect(),
             "restoreBisect"       => RestoreBisect(args.Str("id")),
+            "getFpsBench"         => GetFpsBench(args.Str("id")),
+            "startFpsBench"       => StartFpsBench(args.Str("id")),
+            "cancelFpsBench"      => CancelFpsBench(),
+            "getBoost"            => GetBoost(),
+            "setBoost"            => SetBoost(args.Bool("enabled", false), args.Bool("largePages", false)),
+            "grantLargePages"     => await GrantLargePagesAsync(),
+            "getRuntimeLab"       => GetRuntimeLab(args.Str("id")),
+            "setGc"               => SetGc(args.Str("id"), args.Str("gc")),
+            "installGraal"        => InstallGraal(args.Str("id")),
+            "useBundledJava"      => UseBundledJava(args.Str("id")),
+            "getPrebake"          => GetPrebake(args.Str("id")),
+            "startPrebake"        => StartPrebake(args.Str("id"), args.Int("radius", 1000)),
+            "cancelPrebake"       => CancelPrebake(),
             "getPrepare"          => GetPrepare(args.Str("id")),
             "startPrepare"        => StartPrepare(args.Str("id")),
             "cancelPrepare"       => CancelPrepare(),
@@ -5306,6 +5319,11 @@ Example for an unknown error:
                     foreach (var a in SmartGcFlags)
                         extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument(a));
 
+                // Session Boost: large pages (opt-in; the JVM prints a warning and
+                // falls back if the privilege isn't active yet — never fatal).
+                if (_config.Data.LargePagesEnabled)
+                    extraJvm.Add(new CmlLib.Core.ProcessBuilder.MArgument("-XX:+UseLargePages"));
+
                 // ── VSpeed Turbo (JDK 25 AOT cache, Project Leyden) ──────────
                 // "training": -XX:AOTCacheOutput records this run; the cache is
                 // assembled by a forked JVM at normal shutdown (a force-kill
@@ -5419,6 +5437,12 @@ Example for an unknown error:
                     else Logger.Info($"Java: no bundled Java {javaMajor} on disk yet — letting CmlLib resolve/download");
                 }
 
+                // Session Boost: register the actual Java exe for the high-performance
+                // GPU (fixes laptops silently rendering on the iGPU). Registry, HKCU,
+                // must happen BEFORE the process starts to affect this launch.
+                if (_config.Data.SessionBoostEnabled && !string.IsNullOrWhiteSpace(javaExe))
+                    SetGpuPreference(javaExe);
+
                 // "Join server": pass quickPlay/server args so the game connects on launch.
                 var extraGame = BuildJoinGameArgs(meta.Mc, joinServer);
                 if (extraGame.Count > 0) Push("engineProgress", new { phase = "join", message = $"Will join {joinServer} on launch…" });
@@ -5454,6 +5478,9 @@ Example for an unknown error:
                 inst.Notify();
                 var launchedAt = DateTime.UtcNow;
                 Logger.Info($"Engine launch: '{instanceId}' pid={proc.Id} version={versionName} vspeed={vspeedMode}");
+
+                // Session Boost: priority + P-core affinity + power plan (restored on exit).
+                ApplySessionBoost(proc, javaExe);
                 Push("engineProgress", new { phase = "launched", pid = proc.Id });
 
                 // Measure boot-to-menu from the stdout log (ModernFix / Realms /

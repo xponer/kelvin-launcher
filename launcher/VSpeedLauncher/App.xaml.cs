@@ -77,6 +77,11 @@ public partial class App : Application
         // exe and sweep any dead legacy link. Cheap and idempotent.
         _ = Task.Run(FixBrandShortcuts);
 
+        // Session Boost safety: if a previous session left the machine on the
+        // High-Performance power plan (launcher crashed/restarted mid-game),
+        // put the user's plan back now.
+        try { CryoBridge.RestoreOrphanedPowerPlan(); } catch { }
+
         Tray = new TrayIcon(Manager, Config, OpenMainWindow, OnExitRequested);
 
         if (Config.Data.ShowOnLaunch)

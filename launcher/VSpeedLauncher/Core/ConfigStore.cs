@@ -116,6 +116,14 @@ public sealed class Config
     public int    DefaultRamMax     { get; set; } = 8192;
     public string DefaultJvmPreset  { get; set; } = "Balanced (G1GC)";
 
+    // ── Game Session Boost (applied to every engine launch while enabled) ──
+    /// <summary>High CPU priority + P-core affinity (hybrid CPUs) + discrete-GPU
+    /// preference + high-performance power plan while the game runs.</summary>
+    public bool   SessionBoostEnabled { get; set; } = false;
+    /// <summary>Adds -XX:+UseLargePages (needs the one-time privilege grant +
+    /// re-login; the JVM falls back gracefully with a warning if unavailable).</summary>
+    public bool   LargePagesEnabled   { get; set; } = false;
+
     // ── AI assistant (NVIDIA NIM / build.nvidia.com) ──
     /// <summary>NVIDIA API key (NGC). Pasted by the user in Settings → Assistant. Never logged.</summary>
     public string AiApiKey   { get; set; } = "";

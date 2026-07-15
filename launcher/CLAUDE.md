@@ -111,6 +111,52 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
+### v1.2.0 — unreleased — IN-GAME performance: FPS benchmark · Session Boost · Runtime Lab · World Pre-Baker
+- The launch is fast (−41%); this release goes after FRAMES. New "In-game performance" card
+  at the top of Performance, four features:
+- **In-world FPS benchmark** (`Core/CryoBridge.FpsBench.cs`) — the boot benchmark's honesty
+  inside the game. Provisions Intel's open-source **PresentMon** (pinned v2.5.1, ~1 MB,
+  auto-download like the Turbo runtime), Resumes into the newest world (WatchJoinAsync),
+  settles 15 s, captures 60 s of REAL frame times via ETW, reports avg FPS / 1% low /
+  stutter %, records per-instance history with tags (turbo·boost·lp) so every lever is an
+  A/B. No mod — works on any pack. ETW needs elevation → one UAC per run (same UX as the
+  Defender exclusion; declining gives a clear error). Handles v2 "FrameTime" and v1
+  "MsBetweenPresents" CSV columns. **Stats math validated live against a synthetic 3600-frame
+  CSV** (spike every 120 frames → avg 59.2 / 1%low 20.7 / stutter 0.83% — exactly right).
+  ⚠️ The elevated capture itself couldn't be automated (UAC), but every other step was.
+- **Game Session Boost** (`Core/CryoBridge.Boost.cs`, config `SessionBoostEnabled`) — one
+  toggle, applied to every engine launch: **AboveNormal priority** (re-applied at 5/15/40 s
+  because the JVM/ModLauncher re-exec resets it), **P-core-only affinity on hybrid Intel
+  CPUs** (GetLogicalProcessorInformationEx → highest EfficiencyClass; Windows schedules MC
+  workers onto E-cores → stutter), **discrete-GPU preference** (HKCU UserGpuPreferences on the
+  Java exe — fixes laptops on the iGPU), **High-Performance power plan** while playing.
+  **VERIFIED LIVE on this 4P+8E machine: javaw pinned to 0xFF (the 4 P-cores), power plan
+  switched to High Performance, priority applied (log-confirmed).** Separate **Large pages**
+  toggle grants SeLockMemoryPrivilege via elevated secedit (adds -XX:+UseLargePages; JVM falls
+  back gracefully; needs re-login).
+  - **BUG found + fixed by the live test**: power-plan restore was in-memory only, so a
+    launcher restart mid-game orphaned the machine on High Performance. Now the pre-boost plan
+    is PERSISTED (`powerplan.prev`) and `RestoreOrphanedPowerPlan()` puts it back on next
+    startup. (Restored the user's machine to Balanced during testing.)
+- **Runtime Lab** (`Core/CryoBridge.Runtime.cs`) — per-instance **GC selector**: G1
+  (throughput, smart default) vs **Generational ZGC** (Java 21+, far fewer stutter spikes),
+  written into JvmArgs (preserves non-GC flags), so it flows through the normal launch and
+  the FPS benchmark tags. **Verified live: ZGC ⇄ G1 toggle writes/clears the flags correctly.**
+  Optional **GraalVM** CE runtime provisioning (~320 MB, sets the instance JavaPath) for a
+  better JIT; revert-to-bundled button.
+- **World Pre-Baker** (`Core/CryoBridge.Prebake.cs`) — the "generate chunks efficiently" idea,
+  done RIGHT: no native worldgen (can't run a pack's Java worldgen anyway) — instead it
+  pregenerates on the pack's OWN dedicated server (Chunky) and merges the region files into
+  your save, so exploring has zero chunk-gen lag on ANY pack. Flow: backup save → copy save
+  into the server as its world (same seed) → install Chunky server-side (Modrinth) → boot the
+  server, wait for "Done" → `chunky radius`/`start`, poll console % → `stop` → merge NEW .mca
+  files only (never overwrites existing chunks incl. modded dims under dimensions/). Reuses the
+  v1.0.14 server engine. **Preflight guard verified live** (refuses cleanly until the server is
+  set up); a full bake needs a real 20–90 min server run.
+- Bridge: getFpsBench/startFpsBench/cancelFpsBench, getBoost/setBoost/grantLargePages,
+  getRuntimeLab/setGc/installGraal/useBundledJava, getPrebake/startPrebake/cancelPrebake;
+  events fpsEvent / prebakeEvent / graalProgress+graalDone.
+
 ### v1.1.1 — released (GitHub) — shortcut icon migration after the rebrand
 - Found live on the user's desktop after the 1.1.0 update: Velopack RENAMES its managed
   shortcuts on update (Cryo Launcher.lnk → Kelvin.lnk, from packTitle) but their
