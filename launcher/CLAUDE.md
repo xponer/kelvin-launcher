@@ -111,7 +111,7 @@
 > Velopack release that testers auto-update to) or **unreleased** (only in the
 > local working tree / dev build).
 
-### v1.2.0 — unreleased — IN-GAME performance: FPS benchmark · Session Boost · Runtime Lab · World Pre-Baker
+### v1.2.0 — released (GitHub) — IN-GAME performance: FPS benchmark · Session Boost · Runtime Lab · World Pre-Baker
 - The launch is fast (−41%); this release goes after FRAMES. New "In-game performance" card
   at the top of Performance, four features:
 - **In-world FPS benchmark** (`Core/CryoBridge.FpsBench.cs`) — the boot benchmark's honesty
