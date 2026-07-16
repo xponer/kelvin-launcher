@@ -152,7 +152,30 @@
   server, wait for "Done" → `chunky radius`/`start`, poll console % → `stop` → merge NEW .mca
   files only (never overwrites existing chunks incl. modded dims under dimensions/). Reuses the
   v1.0.14 server engine. **Preflight guard verified live** (refuses cleanly until the server is
-  set up); a full bake needs a real 20–90 min server run.
+  set up).
+  - **CRITICAL fix found by the live test**: a modpack's mod folder is the CLIENT set, so
+    client-only mods (drippyloadingscreen, FancyMenu, renderers, minimaps…) crash a DEDICATED
+    server at mod-load ("invalid dist DEDICATED_SERVER" — ATM10's server crashed on
+    drippyloadingscreen). The pre-baker now **seed-disables ~90 well-known client-only jars**
+    (`.jar.clientoff`) before first boot, and **self-heals** like the bisector: on a startup
+    crash it parses the crash report for "Mod loading issue for: X" / offending jars, disables
+    them, and retries (≤5×). `WaitForServerReady` distinguishes Ready / Exited / Timeout so a
+    crash triggers heal-and-retry instead of a 20-min hang. All disabled jars are restored
+    (`RestoreClientMods`) after the bake so the Host Server feature keeps the full set. Fully
+    general — no per-pack list needed.
+  - **SECOND critical fix (found by the next live run): the ready/progress detection scanned the
+    in-memory console RING BUFFER (2500-line cap). A 480-mod server prints far more than that at
+    boot, so the absolute-index `Skip(cursor)` silently scanned past "Done" — the pre-baker gave
+    up right before sending `chunky start` (server was actually fine, Chunky loaded, but no
+    generation ran).** Fixed: both the ready-wait and the generation-progress poll now TAIL the
+    server's `logs/latest.log` (complete, truncated fresh each start) via `ReadNewLogLines`
+    (position + carry, truncation-safe). Also center Chunky on spawn + re-issue `start` if no
+    Chunky output in 25 s.
+  - **VERIFIED LIVE END-TO-END on ATM10 (500-block radius):** server booted after healing 4
+    client-only mods → Chunky generated **4225 chunks (100%, 43 s)** → "Task finished" detected
+    via the log tail → safe merge kept all 688 existing region files, 0 overwritten (spawn was
+    already explored, so "no new regions" — the correct protective outcome, shown honestly in the
+    UI) → all 481 server jars restored, no orphan process. The whole pipeline works.
 - Bridge: getFpsBench/startFpsBench/cancelFpsBench, getBoost/setBoost/grantLargePages,
   getRuntimeLab/setGc/installGraal/useBundledJava, getPrebake/startPrebake/cancelPrebake;
   events fpsEvent / prebakeEvent / graalProgress+graalDone.
